@@ -1,4 +1,9 @@
 device_config.php
+attendance.sqlite
+.attendance-server.pid
+face_images/
+raspberry_pi/config.json
+raspberry_pi/known_faces/
 *.pyc
 __pycache__/
 .env

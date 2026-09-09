@@ -24,6 +24,12 @@ http.Open "GET", "http://127.0.0.1:8080/index.html", False
 http.Send
 serverReady = (Err.Number = 0 And http.Status = 200)
 Err.Clear
+If serverReady Then
+    http.Open "GET", "http://127.0.0.1:8080/api.php?action=device-attendance", False
+    http.Send
+    serverReady = (Err.Number = 0 And http.Status <> 404)
+End If
+Err.Clear
 On Error GoTo 0
 
 If Not serverReady Then

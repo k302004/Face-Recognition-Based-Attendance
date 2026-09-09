@@ -1,0 +1,15 @@
+[Unit]
+Description=Face recognition attendance client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=drlcefiattendance
+WorkingDirectory=/home/drlcefiattendance/attendance-system
+ExecStart=/home/drlcefiattendance/attendance-system/.venv/bin/python /home/drlcefiattendance/attendance-system/attendance_client.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

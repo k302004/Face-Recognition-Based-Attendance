@@ -33,7 +33,6 @@ Password reset email setup:
 4. Restart the app with `Start Attendance.vbs` and test Forgot password.
 
 Keep `mail-config.php` private. It contains the email account credentials used to send verification codes.
-=======
 DRLCEFI Attendance - Local Deployment
 
 For the non-technical user:
@@ -63,4 +62,43 @@ If port 8080 is already in use, close the other local app using that port before
 Raspberry Pi hardware setup
 
 The Raspberry Pi integration files are in the raspberry_pi folder. Read raspberry_pi\README.md for camera enrollment, LAN configuration, the protected device-attendance API, and optional SIM7600 SMS setup. Create device_config.php from device_config.example.php before connecting a Pi.
->>>>>>> 134244567deebd761d16245076316146e50f51df
+=======
+DRLCEFI Attendance - Local Deployment
+
+For the non-technical user:
+
+1. Double-click "Start Attendance.vbs".
+2. The attendance system opens in the browser at http://127.0.0.1:8080.
+3. When finished, double-click "Stop Attendance.vbs".
+
+When the project is updated on GitHub, download or pull the latest version before starting it. If an older copy is already running, double-click "Stop Attendance.vbs" from that older folder first, then start the updated copy.
+
+The database is the file "attendance.sqlite" in this folder. Keep it in the same folder as api.php and db.php. Face photos are stored in the "face_images" folder; keep that folder with the database when transferring or backing up the app. Back up the database and face_images folder while the app is stopped.
+
+The portable PHP runtime is already included in this folder:
+
+- Keep the entire application folder together, including the `php` folder and `php\php.exe`.
+- Zip the complete folder when transferring it to another Windows computer.
+- Extract the ZIP to Desktop or Documents. Do not place it under `C:\Program Files`, because the database needs write permission.
+- Double-click "Start Attendance.vbs". No PHP, XAMPP, MySQL, command prompt, or terminal installation is needed.
+- To shut down the app, double-click "Stop Attendance.vbs".
+
+The database is `attendance.sqlite`. It is included in the folder and contains the saved accounts, students, attendance, schedules, archives, settings, and audit logs. Face photos are stored in the `face_images` folder. Keep both with the application. Back them up while the app is stopped.
+
+The launcher uses PHP's built-in web server. No MySQL, XAMPP, command prompt, or terminal installation is required on the user's computer when the php folder is included.
+
+If port 8080 is already in use, close the other local app using that port before starting this one.
+
+Password reset email setup:
+
+1. Copy `mail-config.php.example` and rename the copy to `mail-config.php`.
+2. Open `mail-config.php` and enter the SMTP settings for the email account that will send verification codes.
+3. For Gmail, enable 2-Step Verification and create an App Password. Use that App Password in the `password` field; do not use your normal Gmail password.
+4. Restart the app with `Start Attendance.vbs` and test Forgot password.
+
+Keep `mail-config.php` private. It contains the email account credentials used to send verification codes.
+
+Raspberry Pi hardware setup:
+
+The Raspberry Pi integration files are in the raspberry_pi folder. Read `raspberry_pi\README.md` for camera enrollment, LAN configuration, the protected device-attendance API, and optional SIM7600 SMS setup. Create `device_config.php` from `device_config.example.php` before connecting a Pi.
+>>>>>>> 452837e40e69c0aad43c66728ffc24ff0320a5ec

@@ -8,6 +8,7 @@
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="style.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script src="script.js" defer></script>
     </head>
 
@@ -155,7 +156,7 @@
                                     <td>1st Year</td>
                                     <td>2026-2027</td>
                                     <td>Present</td>
-                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button></div></details></td>
+                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button><button class="menu-item edit-btn" type="button">Edit</button><button class="menu-item delete-btn" type="button">Delete</button></div></details></td>
                                 </tr>
                                 <tr data-student-status="active">
                                     <td>2026-002</td>
@@ -164,7 +165,7 @@
                                     <td>2nd Year</td>
                                     <td>2026-2027</td>
                                     <td>Late</td>
-                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button></div></details></td>
+                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button><button class="menu-item edit-btn" type="button">Edit</button><button class="menu-item delete-btn" type="button">Delete</button></div></details></td>
                                 </tr>
                                 <tr data-student-status="active">
                                     <td>2026-003</td>
@@ -173,7 +174,7 @@
                                     <td>3rd Year</td>
                                     <td>2026-2027</td>
                                     <td>Present</td>
-                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button></div></details></td>
+                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button><button class="menu-item edit-btn" type="button">Edit</button><button class="menu-item delete-btn" type="button">Delete</button></div></details></td>
                                 </tr>
                                 <tr data-student-status="active">
                                     <td>2026-004</td>
@@ -182,7 +183,7 @@
                                     <td>1st Year</td>
                                     <td>2026-2027</td>
                                     <td>Absent</td>
-                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button></div></details></td>
+                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button><button class="menu-item edit-btn" type="button">Edit</button><button class="menu-item delete-btn" type="button">Delete</button></div></details></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -315,13 +316,15 @@
                                 <summary class="tool-btn"><span aria-hidden="true">⚙</span> Report filters</summary>
                                 <div class="tool-popover filter-popover">
                                     <label>From <input type="date" id="reportFromDate"></label><label>To <input type="date" id="reportToDate"></label>
+                                    <label>Day <select id="reportDayFilter"><option value="">All days</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option></select></label>
                                     <label>Course <select id="reportCourseFilter"><option value="">All courses</option><option value="BSCS">BSCS</option><option value="BSIT">BSIT</option><option value="BSOA">BSOA</option></select></label>
+                                    <button class="menu-item" type="button" onclick="setReportToday()">Today</button>
                                     <button class="menu-item" type="button" onclick="generateReport()">Generate report</button>
                                 </div>
                             </details>
                             <details class="toolbar-menu">
                                 <summary class="tool-btn"><span aria-hidden="true">•••</span> More</summary>
-                                <div class="tool-popover"><button class="menu-item" type="button" onclick="exportReport()">Export CSV</button><button class="menu-item" type="button" onclick="window.print()">Print</button></div>
+                                <div class="tool-popover"><button class="menu-item" type="button" onclick="downloadReportFile()">Download PDF</button></div>
                             </details>
                             <button class="tool-btn report-print-button" type="button" onclick="printCurrentReport()">Print report</button>
                             <button class="add-btn archive-school-year-btn" type="button" data-admin-only="true" onclick="openArchiveSchoolYearModal()">Archive</button>
@@ -632,6 +635,15 @@
             <div class="modal-content confirm-modal-content">
                 <h2>Archive</h2>
                 <p class="profile-note">Choose or enter the two years for these archived student records.</p>
+                <label for="archiveCourse">Course
+                    <select id="archiveCourse" aria-label="Course to archive">
+                        <option value="">All courses</option>
+                        <option value="BSCS">BSCS</option>
+                        <option value="BSIT">BSHM</option>
+                        <option value="BSOA">BSBA</option>
+                        <option value="BSOA">BSED</option>
+                    </select>
+                </label>
                 <div class="school-year-fields">
                     <label for="archiveStartYear">From
                         <select id="archiveStartYear" aria-label="School year start">
@@ -674,7 +686,7 @@
 
         <div class="modal" id="modal" aria-hidden="true">
             <div class="modal-content">
-                <h2 id="modalTitle">Add Schedule</h2>
+                <div class="modal-heading-row"><h2 id="modalTitle">Add Schedule</h2><button class="modal-icon-close" type="button" aria-label="Close schedule form" onclick="closeModal()">×</button></div>
                 <input type="text" id="subject" placeholder="Subject">
                 <input type="text" id="teacher" placeholder="Instructor">
                 <input type="text" id="room" placeholder="Room">
@@ -710,7 +722,7 @@
 
         <div class="modal" id="studentModal" aria-hidden="true">
             <div class="modal-content">
-                <h2>Add Student</h2>
+                <div class="modal-heading-row"><h2>Add Student</h2><button class="modal-icon-close" type="button" aria-label="Close student form" onclick="closeStudentModal()">×</button></div>
                 <input type="text" id="studentId" placeholder="Student ID">
                 <div class="form-row">
                     <div class="form-group">

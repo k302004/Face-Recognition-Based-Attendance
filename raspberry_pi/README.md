@@ -32,6 +32,7 @@ nano config.json
 ```
 
 Set `api_url`, `device_token`, and `subject`. Keep `sms_enabled` false until attendance recording works.
+The setup also installs the `attendance-client` service. After adding face images, start it with `sudo systemctl start attendance-client`. It will start automatically after future reboots and power outages.
 
 ## 3. Enroll faces
 
@@ -53,9 +54,10 @@ Run:
 ```
 
 Look for `Recorded ...` in the terminal, then refresh the dashboard Attendance view. Press `q` to stop the camera client.
+For normal unattended operation, use `sudo systemctl start attendance-client` instead of running the Python command manually. Check it with `sudo systemctl status attendance-client` and view errors with `journalctl -u attendance-client -f`.
 
 ## 5. Enable SIM7600 SMS
 
 Connect the modem by USB, insert a SIM, and find its serial device with `ls /dev/ttyUSB*`. Set `sms_enabled` and `sms_port` in `config.json`. The client sends to the `parent_phone` stored for the recognized student. The modem requires its own stable power supply; do not power it from a GPIO pin.
 
-The current client sends SMS to one configured recipient. For parent-specific SMS, add a protected API response containing the student's `parent_phone` or implement SMS sending on the PHP server.
+The client sends SMS to the `parent_phone` returned by the protected API for the recognized student.

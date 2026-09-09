@@ -111,10 +111,10 @@ async function loadDashboardData() {
         });
         studentsBody.innerHTML = sortedStudents.map(function (student) {
             const archived = Number(student.is_archived) === 1;
-            return `<tr data-student-status="${archived ? 'archived' : 'active'}">
+            return `<tr data-student-id="${escapeHtml(student.student_id)}" data-student-row-id="${escapeHtml(String(student.id))}" data-student-status="${archived ? 'archived' : 'active'}">
                 <td>${escapeHtml(student.student_id)}</td><td>${escapeHtml(student.full_name)}</td>
                 <td>${escapeHtml(student.course)}</td><td>${escapeHtml(student.year)}</td><td>${escapeHtml(student.school_year || 'Unassigned')}</td>
-                <td>${statusBadge(student.status)}</td><td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button></div></details></td></tr>`;
+                <td>${statusBadge(student.status)}</td><td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button><button class="menu-item edit-btn" type="button" onclick="openStudentModal(this.closest('tr'))">Edit</button><button class="menu-item delete-btn" type="button" onclick="deleteStudent(this.closest('tr'))">Delete</button></div></details></td></tr>`;
         }).join('');
         filterStudents();
         renderArchivedStudents();
@@ -176,6 +176,8 @@ function showResetForm() {
     document.getElementById('authTitle').textContent = 'Reset your password';
     document.getElementById('authSubtitle').textContent = 'We will send a verification code to your email.';
     document.getElementById('resetEmail').value = document.getElementById('loginEmail').value;
+    document.getElementById('resetEmail').readOnly = false;
+    document.getElementById('resetEmail').required = true;
     document.getElementById('resetVerificationFields').hidden = true;
     document.getElementById('resetCode').required = false;
     document.getElementById('resetNewPassword').required = false;
@@ -191,7 +193,21 @@ async function requestApi(action, options) {
         headers: { 'Content-Type': 'application/json' },
         ...options
     });
-    const data = await response.json();
+    const rawText = await response.text();
+    let data = {};
+    if (rawText) {
+        try {
+            data = JSON.parse(rawText);
+        } catch (error) {
+            const contentType = String(response.headers.get('content-type') || '');
+            const message = contentType.includes('text/html')
+                ? 'The server returned an HTML error page. Check the PHP logs and try again.'
+                : 'The server returned an invalid JSON response.';
+            const invalidResponse = new Error(message);
+            invalidResponse.rawText = rawText;
+            throw invalidResponse;
+        }
+    }
     if (!response.ok) {
         const error = new Error(data.message || 'Request failed.');
         error.retryAfter = data.retryAfter;
@@ -310,6 +326,7 @@ async function initializeAuth() {
         closeAccountMenu();
         openSettings();
     });
+
 }
 
 initializeAuth().catch(function () {
@@ -813,9 +830,10 @@ async function confirmArchiveSchoolYear() {
         return;
     }
     const schoolYear = `${startYear}-${endYear}`;
+    const course = document.getElementById('archiveCourse').value;
     if (!shouldConfirmArchive()) return;
     try {
-        await requestApi('archive-year', { method: 'POST', body: JSON.stringify({ schoolYear: schoolYear }) });
+        await requestApi('archive-year', { method: 'POST', body: JSON.stringify({ schoolYear: schoolYear, course: course }) });
         closeArchiveSchoolYearModal();
         await loadDashboardData();
     } catch (error) {
@@ -1327,22 +1345,111 @@ function hasScheduleConflict(day, room, startTime, endTime, ignoredRow) {
 function generateReport() {
     const from = document.getElementById('reportFromDate').value;
     const to = document.getElementById('reportToDate').value;
+    const day = document.getElementById('reportDayFilter').value;
     const course = document.getElementById('reportCourseFilter').value;
+    const records = dashboardData.attendance.filter(function (record) {
+        const date = new Date(record.attendance_date);
+        const dateKey = attendanceDateKey(date);
+        return (!from || dateKey >= from) && (!to || dateKey <= to) && (day === '' || String(date.getDay()) === day) && (!course || record.course === course);
+    });
+    const students = dashboardData.students.filter(function (student) { return !course || student.course === course; });
+    const reportBody = document.querySelector('#reportTable tbody');
+    if (reportBody) {
+        reportBody.innerHTML = students.map(function (student) {
+            const studentRecords = records.filter(function (record) { return record.student_id === student.student_id; });
+            const present = studentRecords.filter(function (record) { return record.status === 'Present'; }).length;
+            const late = studentRecords.filter(function (record) { return record.status === 'Late'; }).length;
+            const absent = studentRecords.filter(function (record) { return record.status === 'Absent'; }).length;
+            const total = present + late + absent;
+            const rate = total ? Math.round(((present + late) / total) * 100) : 0;
+            const status = absent > present + late ? 'At Risk' : late > present ? 'Warning' : 'Good Standing';
+            return `<tr><td>${escapeHtml(student.student_id)}</td><td>${escapeHtml(student.full_name)}</td><td>${present}</td><td>${late}</td><td>${absent}</td><td>${rate}%</td><td class="${statusClass(status)}">${status}</td></tr>`;
+        }).join('');
+    }
     const message = document.getElementById('reportRangeMessage');
     if (message) {
-        message.textContent = `Report generated${from ? ` from ${from}` : ''}${to ? ` to ${to}` : ''}${course ? ` for ${course}` : ''}.`;
+        const dayLabel = day === '' ? '' : ` on ${document.getElementById('reportDayFilter').selectedOptions[0].textContent}`;
+        message.textContent = `Report generated${from ? ` from ${from}` : ''}${to ? ` to ${to}` : ''}${dayLabel}${course ? ` for ${course}` : ''}.`;
     }
 }
 
-function exportReport() {
-    const rows = Array.from(document.querySelectorAll('#reportTable tr')).map(function (row) {
-        return Array.from(row.cells).map(function (cell) { return `"${cell.textContent.replace(/"/g, '""')}"`; }).join(',');
+function setReportToday() {
+    const today = attendanceDateKey(new Date());
+    document.getElementById('reportFromDate').value = today;
+    document.getElementById('reportToDate').value = today;
+    document.getElementById('reportDayFilter').value = String(new Date().getDay());
+    generateReport();
+}
+
+function downloadReportFile() {
+    const pdfLibrary = window.jspdf;
+    const table = document.getElementById('reportTable');
+    if (!pdfLibrary || !table) {
+        alert('The PDF download library is not available. Check your internet connection and try again.');
+        return;
+    }
+    const pdf = new pdfLibrary.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 14;
+    const columns = Array.from(table.querySelectorAll('thead th')).map(function (cell) { return cell.textContent.trim(); });
+    const rows = Array.from(table.querySelectorAll('tbody tr')).map(function (row) {
+        return Array.from(row.cells).map(function (cell) { return cell.textContent.trim(); });
     });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
-    link.download = 'attendance-report.csv';
-    link.click();
-    URL.revokeObjectURL(link.href);
+    const columnWidths = [30, 64, 25, 25, 25, 31, 56];
+    const rowHeight = 9;
+    const drawHeader = function () {
+        pdf.setFillColor(128, 0, 0);
+        pdf.rect(0, 0, pageWidth, 7, 'F');
+        pdf.setTextColor(128, 0, 0);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(11);
+        pdf.text('DRLCEFI', pageWidth / 2, 18, { align: 'center' });
+        pdf.setFontSize(21);
+        pdf.text('Attendance Report', pageWidth / 2, 29, { align: 'center' });
+        pdf.setTextColor(102, 89, 84);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.text(`Generated ${new Date().toLocaleString()}`, pageWidth / 2, 36, { align: 'center' });
+        const message = document.getElementById('reportRangeMessage')?.textContent || '';
+        pdf.text(message, pageWidth / 2, 42, { align: 'center' });
+    };
+    const drawTableHeader = function (y) {
+        pdf.setFillColor(128, 0, 0);
+        pdf.rect(margin, y, pageWidth - margin * 2, rowHeight, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        let x = margin;
+        columns.forEach(function (column, index) { pdf.text(column, x + 2, y + 6); x += columnWidths[index]; });
+        return y + rowHeight;
+    };
+    drawHeader();
+    let y = drawTableHeader(50);
+    rows.forEach(function (row, rowIndex) {
+        if (y + rowHeight > pageHeight - 12) {
+            pdf.addPage();
+            drawHeader();
+            y = drawTableHeader(50);
+        }
+        pdf.setFillColor(rowIndex % 2 ? 251 : 255, rowIndex % 2 ? 248 : 255, rowIndex % 2 ? 246 : 255);
+        pdf.rect(margin, y, pageWidth - margin * 2, rowHeight, 'F');
+        pdf.setDrawColor(228, 216, 210);
+        pdf.rect(margin, y, pageWidth - margin * 2, rowHeight);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        let x = margin;
+        row.forEach(function (value, index) {
+            if (index === row.length - 1) {
+                const color = value === 'Good Standing' ? [33, 107, 44] : value === 'Warning' ? [138, 87, 0] : [128, 0, 0];
+                pdf.setTextColor(color[0], color[1], color[2]);
+            } else pdf.setTextColor(47, 34, 34);
+            pdf.text(pdf.splitTextToSize(value, columnWidths[index] - 4)[0], x + 2, y + 6);
+            x += columnWidths[index];
+        });
+        y += rowHeight;
+    });
+    pdf.save(`attendance-report-${attendanceDateKey(new Date())}.pdf`);
 }
 
 function closeModal() {
@@ -1357,15 +1464,9 @@ function closeStudentModal() {
     const modal = document.getElementById('studentModal');
     if (modal) {
         modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
     }
     clearStudentForm();
-}
-
-function openStudentModal() {
-    const modal = document.getElementById('studentModal');
-    if (modal) {
-        modal.style.display = 'flex';
-    }
 }
 
 function openModal() {
@@ -1387,17 +1488,25 @@ function clearForm() {
     document.getElementById('scheduleSchoolYear').value = '';
 }
 
+let editingStudentId = null;
+
 function clearStudentForm() {
+    editingStudentId = null;
+    const modalTitle = document.querySelector('#studentModal h2');
+    if (modalTitle) modalTitle.textContent = 'Add Student';
+    const saveButton = document.querySelector('#studentModal .save-btn');
+    if (saveButton) saveButton.textContent = 'Save Student';
     document.getElementById('studentId').value = '';
     document.getElementById('studentFirstName').value = '';
     document.getElementById('studentMiddleName').value = '';
     document.getElementById('studentLastName').value = '';
     document.getElementById('course').value = '';
-    document.getElementById('studentSchoolYearStart').value = '';
-    document.getElementById('studentSchoolYearEnd').value = '';
+    document.getElementById('studentSchoolYearStart').value = String(new Date().getFullYear());
+    document.getElementById('studentSchoolYearEnd').value = String(new Date().getFullYear() + 1);
     document.getElementById('year').value = '';
     document.getElementById('status').value = '';
     document.getElementById('facePhoto').value = '';
+    document.getElementById('parentPhone').value = '';
 }
 
 function readFacePhoto(file) {
@@ -1433,6 +1542,62 @@ function initializeParentPhoneFormatter() {
 
 initializeParentPhoneFormatter();
 
+function openStudentModal(row) {
+    const modal = document.getElementById('studentModal');
+    if (!modal) return;
+
+    const modalTitle = document.querySelector('#studentModal h2');
+    const saveButton = document.querySelector('#studentModal .save-btn');
+    const fields = {
+        studentId: document.getElementById('studentId'),
+        firstName: document.getElementById('studentFirstName'),
+        middleName: document.getElementById('studentMiddleName'),
+        lastName: document.getElementById('studentLastName'),
+        course: document.getElementById('course'),
+        schoolYearStart: document.getElementById('studentSchoolYearStart'),
+        schoolYearEnd: document.getElementById('studentSchoolYearEnd'),
+        year: document.getElementById('year'),
+        status: document.getElementById('status'),
+        parentPhone: document.getElementById('parentPhone'),
+        facePhoto: document.getElementById('facePhoto')
+    };
+
+    editingStudentId = null;
+    if (modalTitle) modalTitle.textContent = 'Add Student';
+    if (saveButton) saveButton.textContent = 'Save Student';
+    Object.values(fields).forEach(function (field) { if (field && field.tagName === 'INPUT' && field.type === 'file') field.value = ''; else if (field) field.value = ''; });
+    if (fields.schoolYearStart) fields.schoolYearStart.value = String(new Date().getFullYear());
+    if (fields.schoolYearEnd) fields.schoolYearEnd.value = String(new Date().getFullYear() + 1);
+
+    if (row) {
+        editingStudentId = row.dataset.studentRowId || row.dataset.studentId || row.cells[0].textContent.trim();
+        const parts = (row.cells[1]?.textContent || '').trim().split(/\s+/);
+        const firstName = parts[0] || '';
+        const lastName = parts.length > 1 ? parts[parts.length - 1] : '';
+        const middleName = parts.length > 2 ? parts.slice(1, -1).join(' ') : '';
+        const schoolYear = (row.cells[4]?.textContent || '').trim();
+        const statusValue = row.cells[5]?.textContent.trim();
+
+        if (modalTitle) modalTitle.textContent = 'Edit Student';
+        if (saveButton) saveButton.textContent = 'Update Student';
+        if (fields.studentId) fields.studentId.value = row.cells[0].textContent.trim();
+        if (fields.firstName) fields.firstName.value = firstName;
+        if (fields.middleName) fields.middleName.value = middleName;
+        if (fields.lastName) fields.lastName.value = lastName;
+        if (fields.course) fields.course.value = row.cells[2].textContent.trim();
+        if (fields.schoolYearStart && fields.schoolYearEnd && /^\d{4}-\d{4}$/.test(schoolYear)) {
+            const [startYear, endYear] = schoolYear.split('-');
+            fields.schoolYearStart.value = startYear;
+            fields.schoolYearEnd.value = endYear;
+        }
+        if (fields.year) fields.year.value = row.cells[3].textContent.trim();
+        if (fields.status) fields.status.value = statusValue === 'Irregular' ? 'Irregular' : 'Regular';
+    }
+
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+}
+
 async function addStudent() {
     const studentId = document.getElementById('studentId').value.trim();
     const firstName = document.getElementById('studentFirstName').value.trim();
@@ -1443,11 +1608,12 @@ async function addStudent() {
     const schoolYearStart = document.getElementById('studentSchoolYearStart').value.trim();
     const schoolYearEnd = document.getElementById('studentSchoolYearEnd').value.trim();
     const schoolYear = `${schoolYearStart}-${schoolYearEnd}`;
+    const parentPhone = document.getElementById('parentPhone').value.trim();
     const year = document.getElementById('year').value.trim();
     const status = document.getElementById('status').value.trim();
     const facePhoto = document.getElementById('facePhoto').files[0];
 
-    if (!studentId || !firstName || !lastName || !course || !schoolYearStart || !schoolYearEnd || !year || !status || !facePhoto) {
+    if (!studentId || !firstName || !lastName || !course || !schoolYearStart || !schoolYearEnd || !parentPhone || !year || !status || (!editingStudentId && !facePhoto)) {
         alert('Please complete all required fields.');
         return;
     }
@@ -1455,19 +1621,41 @@ async function addStudent() {
         alert('Enter consecutive school years, such as 2026 and 2027.');
         return;
     }
-    if (facePhoto.size > 5 * 1024 * 1024) {
+    if (facePhoto && facePhoto.size > 5 * 1024 * 1024) {
         alert('The face photo must be 5 MB or smaller.');
         return;
     }
 
     try {
-        const facePhotoData = await readFacePhoto(facePhoto);
-        await requestApi('student', { method: 'POST', body: JSON.stringify({ studentId, fullName, course, schoolYear, year, status, facePhoto: facePhotoData }) });
+        const payload = { studentId, fullName, course, schoolYear, parentPhone, year, status };
+        if (editingStudentId) payload.id = editingStudentId;
+        if (facePhoto) payload.facePhoto = await readFacePhoto(facePhoto);
+        await requestApi('student', { method: 'POST', body: JSON.stringify(payload) });
         closeStudentModal();
         clearStudentForm();
         await loadDashboardData();
     } catch (error) {
         alert(error.message);
+    }
+}
+
+async function deleteStudent(row) {
+    const studentId = row.dataset.studentId;
+    const studentName = row.cells[1]?.textContent.trim() || studentId;
+    
+    if (!confirm(`Are you sure you want to delete ${studentName}? This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        await requestApi('delete-student', {
+            method: 'POST',
+            body: JSON.stringify({ studentId })
+        });
+        alert(`Student ${studentName} has been deleted successfully.`);
+        await loadDashboardData();
+    } catch (error) {
+        alert('Error deleting student: ' + error.message);
     }
 }
 

@@ -70,12 +70,17 @@ def record_attendance(config, student_id, name):
         timeout=10,
     )
     if response.status_code == 409:
-        print(f"Already recorded today: {student_id}")
+        print(f"Time out already recorded today: {student_id}")
         return False
-    response.raise_for_status()
+    if not response.ok:
+        print(f"Attendance API error ({response.status_code}): {response.text}")
+        return False
     result = response.json()
-    send_sms(config, result.get("parentPhone"), result.get("studentName", name), config["subject"], checked_in_at)
-    print(f"Recorded {student_id} ({name}) at {checked_in_at}")
+    if result.get("action") == "time_out":
+        print(f"Time out recorded for {student_id} at {result.get('timeOut')}")
+    else:
+        send_sms(config, result.get("parentPhone"), result.get("studentName", name), config["subject"], checked_in_at)
+        print(f"Time in recorded for {student_id} ({name}) at {checked_in_at}")
     return True
 
 
@@ -87,7 +92,8 @@ def main():
     if not camera.isOpened():
         raise RuntimeError("Could not open the camera")
 
-    last_seen = {}
+    active_faces = {}
+    absence_seconds = 5
     tolerance = config.get("match_tolerance", 0.48)
     scan_seconds = config.get("scan_seconds", 2)
     try:
@@ -95,6 +101,8 @@ def main():
             success, frame = camera.read()
             if not success:
                 continue
+            now = time.time()
+            seen_student_ids = set()
             small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
             rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
             locations = face_recognition.face_locations(rgb_frame)
@@ -105,11 +113,15 @@ def main():
                 if best_match is None or not matches[best_match]:
                     continue
                 student_id = student_ids[best_match]
-                now = time.time()
-                if now - last_seen.get(student_id, 0) < 30:
-                    continue
-                record_attendance(config, student_id, student_id)
-                last_seen[student_id] = now
+                seen_student_ids.add(student_id)
+                if student_id not in active_faces:
+                    if record_attendance(config, student_id, student_id):
+                        active_faces[student_id] = now
+                else:
+                    active_faces[student_id] = now
+            for student_id, last_seen_at in list(active_faces.items()):
+                if student_id not in seen_student_ids and now - last_seen_at >= absence_seconds:
+                    del active_faces[student_id]
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
             time.sleep(scan_seconds / 10)
