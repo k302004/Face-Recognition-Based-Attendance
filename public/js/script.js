@@ -1234,7 +1234,12 @@ async function saveAdminSettings() {
 function applySystemSettings(settings) {
     const logo = document.querySelector('.logo');
     if (logo) {
-        logo.textContent = settings.schoolName || 'DRLCEFI';
+        const logoLabel = logo.querySelector('span');
+        if (logoLabel) {
+            logoLabel.textContent = settings.schoolName || 'DRLCEFI';
+        } else {
+            logo.textContent = settings.schoolName || 'DRLCEFI';
+        }
         logo.style.backgroundImage = '';
         logo.classList.remove('has-school-logo');
     }
