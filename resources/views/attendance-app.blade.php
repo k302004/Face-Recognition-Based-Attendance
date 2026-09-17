@@ -6,7 +6,7 @@
         <title>DRLCEFI</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,600;6..96,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="{{ asset('css/style.css') }}">
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script src="{{ asset('js/script.js') }}" defer></script>
@@ -79,7 +79,10 @@
         <div class="page-shell" id="appShell" hidden>
             <header class="site-header">
                 <div class="site-header__inner">
-                    <a class="logo" href="index.html">DRLCEFI</a>
+                    <a class="logo" href="index.html" aria-label="DRLCEFI home">
+                        <img src="{{ asset('images.jpg') }}" alt="DRLCEFI logo">
+                        <span>DRLCEFI</span>
+                    </a>
 
                     <nav class="site-nav" aria-label="Primary navigation">
                         <ul class="site-nav__list">
@@ -413,7 +416,7 @@
 
                     <div class="overview">
                         <div class="card">
-                            <h2>📅 Daily Attendance</h2>
+                            <h2><span class="overview-card-icon overview-card-icon--daily" aria-hidden="true"></span>Daily Attendance</h2>
                             <div class="donut daily">
                                 <div class="inner">
                                     <h1>92%</h1>
@@ -433,7 +436,7 @@
                         </div>
 
                         <div class="card">
-                            <h2>📆 Weekly Attendance</h2>
+                            <h2><span class="overview-card-icon overview-card-icon--weekly" aria-hidden="true"></span>Weekly Attendance</h2>
                             <div class="donut weekly">
                                 <div class="inner">
                                     <h1>89%</h1>
@@ -453,7 +456,7 @@
                         </div>
 
                         <div class="card">
-                            <h2>📊 Monthly Attendance</h2>
+                            <h2><span class="overview-card-icon overview-card-icon--monthly" aria-hidden="true"></span>Monthly Attendance</h2>
                             <div class="donut monthly">
                                 <div class="inner">
                                     <h1>95%</h1>
@@ -523,55 +526,6 @@
                         <div id="auditLog"></div>
                     </section>
 
-                    <div class="timeline" id="timeline">
-                        <div class="history-card">
-                            <div class="dot"></div>
-                            <h3>John Cruz</h3>
-                            <p class="message">
-                                Attendance notification successfully sent to the parent informing that <b>John Cruz</b> attended <b>Programming 1</b>.
-                            </p>
-                            <div class="details">
-                                <span>📅 August 7, 2026 | 🕗 7:58 AM</span>
-                                <span class="status">Delivered</span>
-                            </div>
-                        </div>
-
-                        <div class="history-card">
-                            <div class="dot"></div>
-                            <h3>Maria Santos</h3>
-                            <p class="message">
-                                Attendance notification successfully sent to the parent informing that <b>Maria Santos</b> attended <b>Database Systems</b>.
-                            </p>
-                            <div class="details">
-                                <span>📅 August 7, 2026 | 🕘 8:05 AM</span>
-                                <span class="status">Delivered</span>
-                            </div>
-                        </div>
-
-                        <div class="history-card">
-                            <div class="dot"></div>
-                            <h3>Peter Ramos</h3>
-                            <p class="message">
-                                Attendance notification successfully sent to the parent informing that <b>Peter Ramos</b> attended <b>Networking</b>.
-                            </p>
-                            <div class="details">
-                                <span>📅 August 7, 2026 | 🕗 7:51 AM</span>
-                                <span class="status">Delivered</span>
-                            </div>
-                        </div>
-
-                        <div class="history-card">
-                            <div class="dot"></div>
-                            <h3>Anne Reyes</h3>
-                            <p class="message">
-                                Attendance notification successfully sent to the parent informing that <b>Anne Reyes</b> attended <b>Computer Programming</b>.
-                            </p>
-                            <div class="details">
-                                <span>📅 August 7, 2026 | 🕗 7:54 AM</span>
-                                <span class="status">Delivered</span>
-                            </div>
-                        </div>
-                    </div>
                 </section>
 
                 <section id="scheduleView" class="view-section" hidden>
