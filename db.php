@@ -9,7 +9,7 @@ $options = [
 ];
 
 try {
-    $db = new PDO('sqlite:' . $databasePath, null, null, $options);
+    $db = new PDO('sqlite:' . __DIR__ . '/attendance.sqlite');
     $db->exec('PRAGMA foreign_keys = ON');
     $db->exec('CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

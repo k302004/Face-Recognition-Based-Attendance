@@ -31,7 +31,7 @@ chmod +x setup.sh
 nano config.json
 ```
 
-Set `api_url`, `device_token`, and `subject`. Keep `sms_enabled` false until attendance recording works.
+On Windows, run `ipconfig` and copy the IPv4 address from the active Wi-Fi or Ethernet adapter. On the Pi, set `api_url` to that address, for example `http://192.168.1.25:8080/api.php?action=device-attendance`; do not use the literal text `windows_ip`. Set `device_token` to exactly match the `token` returned by `device_config.php` on Windows. Keep `sms_enabled` false until attendance recording works.
 The setup also installs the `attendance-client` service. After adding face images, start it with `sudo systemctl start attendance-client`. It will start automatically after future reboots and power outages.
 
 ## 3. Enroll faces
@@ -53,7 +53,7 @@ Run:
 .venv/bin/python attendance_client.py
 ```
 
-Look for `Recorded ...` in the terminal, then refresh the dashboard Attendance view. Press `q` to stop the camera client.
+The client first prints `Attendance API connection authenticated`. If it cannot connect, verify the Windows IP and port; if it reports an invalid token, copy the token from `device_config.php` exactly into `config.json`. Look for `Recorded ...` in the terminal, then refresh the dashboard Attendance view. Press `q` to stop the camera client.
 For normal unattended operation, use `sudo systemctl start attendance-client` instead of running the Python command manually. Check it with `sudo systemctl status attendance-client` and view errors with `journalctl -u attendance-client -f`.
 
 ## 5. Enable SIM7600 SMS

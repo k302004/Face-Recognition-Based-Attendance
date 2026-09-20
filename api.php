@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+date_default_timezone_set('Asia/Manila');
 session_start();
 header('Content-Type: application/json');
 set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
@@ -143,6 +144,28 @@ function statusForScan(PDO $db, string $subject): string {
 $action = $_GET['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 $payload = data();
+
+if ($method === 'GET' && $action === 'device-health') {
+    $configuredToken = deviceToken();
+    $requestToken = $_SERVER['HTTP_X_DEVICE_TOKEN'] ?? '';
+    if ($configuredToken === '' || !is_string($requestToken) || !hash_equals($configuredToken, $requestToken)) reply(['message' => 'Invalid device token.'], 401);
+    reply(['ok' => true, 'message' => 'Device connection authenticated.']);
+}
+
+if ($method === 'GET' && $action === 'device-faces') {
+    $configuredToken = deviceToken();
+    $requestToken = $_SERVER['HTTP_X_DEVICE_TOKEN'] ?? '';
+    if ($configuredToken === '' || !is_string($requestToken) || !hash_equals($configuredToken, $requestToken)) reply(['message' => 'Invalid device token.'], 401);
+    $students = $db->query('SELECT student_id, full_name, face_image_path FROM students WHERE is_archived = 0 AND face_image_path IS NOT NULL AND face_image_path != "" ORDER BY student_id')->fetchAll();
+    $faces = [];
+    foreach ($students as $student) {
+        $imagePath = __DIR__ . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string) $student['face_image_path']);
+        if (!is_file($imagePath)) continue;
+        $mime = mime_content_type($imagePath) ?: 'image/jpeg';
+        $faces[] = ['studentId' => $student['student_id'], 'studentName' => $student['full_name'], 'image' => 'data:' . $mime . ';base64,' . base64_encode((string) file_get_contents($imagePath))];
+    }
+    reply(['faces' => $faces]);
+}
 
 if ($method === 'POST' && $action === 'signup') {
     $name = trim((string) ($payload['name'] ?? ''));
