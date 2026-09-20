@@ -80,7 +80,6 @@
             <header class="site-header">
                 <div class="site-header__inner">
                     <a class="logo" href="index.html" aria-label="DRLCEFI home">
-                        <img src="{{ asset('images.jpg') }}" alt="DRLCEFI logo">
                         <span>DRLCEFI</span>
                     </a>
 
