@@ -1,0 +1,13 @@
+{
+  "api_url": "http://192.168.1.25:8080/api.php?action=device-attendance",
+  "device_token": "replace-with-the-token-from-device_config.php",
+  "known_faces_dir": "known_faces",
+  "subject": "Programming 1",
+  "camera_index": 0,
+  "match_tolerance": 0.48,
+  "scan_seconds": 2,
+  "sms_enabled": false,
+  "sms_port": "/dev/ttyUSB2",
+  "sms_baud": 115200,
+  "sms_message": "{name} checked in for {subject} at {time}."
+}
