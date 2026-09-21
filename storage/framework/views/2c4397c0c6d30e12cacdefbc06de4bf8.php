@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>DRLCEFI</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="<?php echo e(asset('css/style.css')); ?>">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+        <script src="<?php echo e(asset('js/script.js')); ?>" defer></script>
+    </head>
+
+    <body>
+        <main class="auth-screen" id="authScreen">
+            <section class="auth-card" aria-labelledby="authTitle">
+                <div class="auth-brand">DRLCEFI</div>
+                <h1 id="authTitle">Welcome back</h1>
+                <p class="auth-subtitle" id="authSubtitle">Sign in to manage your attendance dashboard.</p>
+
+                <div class="auth-tabs" role="tablist" aria-label="Account access">
+                    <button class="auth-tab active" id="loginTab" type="button" role="tab" aria-selected="true" aria-controls="loginForm">Log in</button>
+                    <button class="auth-tab" id="signupTab" type="button" role="tab" aria-selected="false" aria-controls="signupForm">Sign up</button>
+                </div>
+
+                <form class="auth-form" id="loginForm">
+                    <label for="loginEmail">Email address</label>
+                    <input type="email" id="loginEmail" autocomplete="email" placeholder="you@example.com" required>
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" autocomplete="current-password" placeholder="Enter your password" required>
+                    <label class="remember-option" for="rememberPassword">
+                        <input type="checkbox" id="rememberPassword">
+                        <span>Remember password</span>
+                    </label>
+                    <button class="auth-submit" type="submit">Log in</button>
+                </form>
+
+                <form class="auth-form" id="resetForm" hidden>
+                    <div class="reset-intro">
+                        <span class="reset-intro__icon" aria-hidden="true">&#128274;</span>
+                        <div>
+                            <strong>Secure account recovery</strong>
+                            <p>Enter your email and we will send a one-time verification code.</p>
+                        </div>
+                    </div>
+                    <label for="resetEmail">Email address</label>
+                    <input type="email" id="resetEmail" autocomplete="email" placeholder="you@example.com" required>
+                    <div id="resetVerificationFields" hidden>
+                        <label for="resetCode">Verification code</label>
+                        <input type="text" id="resetCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="Enter 6-digit code" maxlength="6">
+                        <label for="resetNewPassword">New password</label>
+                        <input type="password" id="resetNewPassword" autocomplete="new-password" placeholder="At least 6 characters" minlength="6">
+                        <label for="resetConfirmPassword">Confirm new password</label>
+                        <input type="password" id="resetConfirmPassword" autocomplete="new-password" placeholder="Repeat your new password" minlength="6">
+                    </div>
+                    <button class="auth-submit" id="resetSubmit" type="submit">Send verification code</button>
+                    <button class="auth-back" id="resetBack" type="button">Back to log in</button>
+                </form>
+
+                <form class="auth-form" id="signupForm" hidden>
+                    <div class="form-group">
+                        <label for="signupFullName">Full name</label>
+                        <input type="text" id="signupFullName" autocomplete="name" placeholder="Full name" required>
+                    </div>
+                    <label for="signupEmail">Email address</label>
+                    <input type="email" id="signupEmail" autocomplete="email" placeholder="you@example.com" required>
+                    <label for="signupPassword">Password</label>
+                    <input type="password" id="signupPassword" autocomplete="new-password" placeholder="At least 6 characters" minlength="6" required>
+                    <button class="auth-submit" type="submit">Create account</button>
+                </form>
+
+                <p class="auth-message" id="authMessage" role="alert" aria-live="polite"></p>
+                <button class="auth-note auth-note-button" id="forgotPasswordLink" type="button">Forgot password?</button>
+        
+            </section>
+        </main>
+
+        <div class="page-shell" id="appShell" hidden>
+            <header class="site-header">
+                <div class="site-header__inner">
+                    <a class="logo" href="index.html">DRLCEFI</a>
+
+                    <nav class="site-nav" aria-label="Primary navigation">
+                        <ul class="site-nav__list">
+                            <li><a href="#" class="nav-link active" data-view="home">Home</a></li>
+                            <li><a href="#" class="nav-link" data-view="schedule">Schedule</a></li>
+                            <li><a href="#" class="nav-link" data-view="attendance">Attendance</a></li>
+                            <li><a href="#" class="nav-link" data-view="report">Report</a></li>
+                            <li><a href="#" class="nav-link" data-view="overview">Overview</a></li>
+                            <li><a href="#" class="nav-link" data-view="history">History</a></li>
+                            <li><a href="#" class="nav-link" data-view="archives">Archives</a></li>
+                        </ul>
+                    </nav>
+
+                    <div class="admin">
+                        <button class="admin-btn" type="button" aria-expanded="false" aria-controls="menu" onclick="toggleMenu()">
+                            <span class="admin-icon" aria-hidden="true">👤</span>
+                            <span class="caret" aria-hidden="true">▼</span>
+                        </button>
+
+                        <div class="dropdown" id="menu" role="menu">
+                            <div class="account-menu-heading">Account</div>
+                            <a href="#" id="profileLink">My Profile</a>
+                            <a href="#" id="settingsLink">Account Settings</a>
+                            <div class="account-menu-divider"></div>
+                            <a href="#" id="logoutLink">Logout</a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <section class="print-document-header" aria-hidden="true">
+                <div class="print-document-brand">DRLCEFI</div>
+                <h1 id="printDocumentTitle">Attendance Report</h1>
+                <p id="printDocumentSubtitle"></p>
+            </section>
+
+            <main class="container">
+                <section id="homeView" class="view-section">
+                    <section class="welcome" aria-labelledby="dashboard-title">
+                        <h1 id="dashboard-title">Welcome, Administrator!</h1>
+                        <p>Manage student attendance, schedules, and reports from this dashboard.</p>
+                    </section>
+
+                    <div class="view-toolbar" aria-label="Student list tools">
+                        <div class="toolbar-search">
+                            <span aria-hidden="true">⌕</span>
+                            <input type="search" id="studentSearch" placeholder="Search students..." aria-label="Search students">
+                        </div>
+                        <div class="toolbar-actions">
+                            <button class="add-btn archive-school-year-btn" type="button" data-admin-only="true" onclick="openArchiveSchoolYearModal()">Archive</button>
+                            <button class="add-btn toolbar-primary" type="button" data-admin-only="true" onclick="openStudentModal()">+ Add Student</button>
+                        </div>
+                    </div>
+
+                    <section class="table-container" aria-labelledby="attendance-table-title">
+                        <h2 id="attendance-table-title" class="sr-only">Student attendance records</h2>
+                        <table id="studentTable">
+                            <thead>
+                                <tr>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Student Name</th>
+                                    <th scope="col">Course</th>
+                                    <th scope="col">Year</th>
+                                    <th scope="col">School Year</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr data-student-status="active">
+                                    <td>2026-001</td>
+                                    <td>John Cruz</td>
+                                    <td>BSCS</td>
+                                    <td>1st Year</td>
+                                    <td>2026-2027</td>
+                                    <td>Present</td>
+                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button><button class="menu-item edit-btn" type="button">Edit</button><button class="menu-item delete-btn" type="button">Delete</button></div></details></td>
+                                </tr>
+                                <tr data-student-status="active">
+                                    <td>2026-002</td>
+                                    <td>Maria Santos</td>
+                                    <td>BSIT</td>
+                                    <td>2nd Year</td>
+                                    <td>2026-2027</td>
+                                    <td>Late</td>
+                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button><button class="menu-item edit-btn" type="button">Edit</button><button class="menu-item delete-btn" type="button">Delete</button></div></details></td>
+                                </tr>
+                                <tr data-student-status="active">
+                                    <td>2026-003</td>
+                                    <td>Anne Reyes</td>
+                                    <td>BSCS</td>
+                                    <td>3rd Year</td>
+                                    <td>2026-2027</td>
+                                    <td>Present</td>
+                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button><button class="menu-item edit-btn" type="button">Edit</button><button class="menu-item delete-btn" type="button">Delete</button></div></details></td>
+                                </tr>
+                                <tr data-student-status="active">
+                                    <td>2026-004</td>
+                                    <td>Peter Ramos</td>
+                                    <td>BSOA</td>
+                                    <td>1st Year</td>
+                                    <td>2026-2027</td>
+                                    <td>Absent</td>
+                                    <td><details class="row-menu"><summary aria-label="Student actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button" onclick="openStudentProfile(this)">Profile</button><button class="menu-item edit-btn" type="button">Edit</button><button class="menu-item delete-btn" type="button">Delete</button></div></details></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </section>
+                    <div class="pagination" id="studentPagination" aria-label="Student list pagination"></div>
+                </section>
+
+                <section id="archiveView" class="view-section" hidden>
+                    <div class="title">
+                        <h1>Archived Students</h1>
+                        <div class="view-toolbar" aria-label="Archive tools">
+                            <div class="toolbar-search"><span aria-hidden="true">⌕</span><input type="search" id="archiveSearch" placeholder="Search archives..." aria-label="Search archived students"></div>
+                            <details class="toolbar-menu">
+                                <summary class="tool-btn"><span aria-hidden="true">⚙</span> Filter</summary>
+                                <div class="tool-popover filter-popover">
+                                    <label>School year <select id="archiveSchoolYearFilter"><option value="">All school years</option><option value="2026-2027">2026-2027</option><option value="2027-2028">2027-2028</option><option value="2028-2029">2028-2029</option><option value="Unassigned">Unassigned</option></select></label>
+                                    <label>Course <select id="archiveCourseFilter"><option value="">All courses</option><option value="BSCS">BSCS</option><option value="BSIT">BSIT</option><option value="BSOA">BSOA</option></select></label>
+                                    <button class="menu-item" type="button" data-admin-only="true" onclick="restoreSelectedSchoolYear()">Restore selected school year</button>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+
+                    <section class="table-container" aria-labelledby="archive-table-title">
+                        <h2 id="archive-table-title" class="sr-only">Archived student records</h2>
+                        <table id="archiveTable">
+                            <thead><tr><th scope="col">School Year</th><th scope="col">Students</th><th scope="col">Courses</th><th scope="col">Actions</th></tr></thead>
+                            <tbody id="archiveTableBody"></tbody>
+                        </table>
+                        <p class="empty-state" id="archiveEmptyState">No archived students found.</p>
+                    </section>
+                </section>
+
+                <section id="archiveDetailView" class="view-section" hidden>
+                    <div class="title archive-detail-heading">
+                        <div>
+                            <button class="back-link" type="button" onclick="closeArchivedYear()">← Back to archive years</button>
+                            <h1 id="archiveDetailTitle">Archived School Year</h1>
+                            <p id="archiveDetailSubtitle">Read-only records from this school year.</p>
+                        </div>
+                        <button class="tool-btn archive-report-print-button" type="button" onclick="printCurrentReport()" hidden>Print report</button>
+                    </div>
+                    <nav class="archive-category-tabs" aria-label="Archived data categories">
+                        <button type="button" class="archive-category-tab active" data-archive-category="students">Students</button>
+                        <button type="button" class="archive-category-tab" data-archive-category="attendance">Attendance</button>
+                        <button type="button" class="archive-category-tab" data-archive-category="schedule">Schedule</button>
+                        <button type="button" class="archive-category-tab" data-archive-category="report">Report</button>
+                        <button type="button" class="archive-category-tab" data-archive-category="overview">Overview</button>
+                    </nav>
+                    <div id="archiveDetailContent"></div>
+                </section>
+
+                <section id="attendanceView" class="view-section" hidden>
+                    <div class="title">
+                        <div class="attendance-heading">
+                            <h1>Student Attendance</h1>
+                            <div class="attendance-date-nav" aria-label="Attendance date navigation">
+                                <button class="date-nav-button" type="button" aria-label="Previous day" onclick="changeAttendanceDate(-1)">←</button>
+                                <strong id="attendanceDateLabel">Today</strong>
+                                <button class="date-nav-button" type="button" aria-label="Next day" onclick="changeAttendanceDate(1)">→</button>
+                                <button class="today-button" type="button" onclick="goToAttendanceToday()">Today</button>
+                            </div>
+                        </div>
+                        <div class="view-toolbar" aria-label="Attendance tools">
+                            <div class="toolbar-search"><span aria-hidden="true">⌕</span><input type="search" id="attendanceSearch" placeholder="Search attendance..." aria-label="Search attendance"></div>
+                            <details class="toolbar-menu">
+                                <summary class="tool-btn"><span aria-hidden="true">⚙</span> Filter</summary>
+                                <div class="tool-popover filter-popover">
+                                    <label>Subject <select id="attendanceSubjectFilter"><option value="">All subjects</option><option value="Programming 1">Programming 1</option><option value="Database">Database</option><option value="Networking">Networking</option></select></label>
+                                    <label>Status <select id="attendanceStatusFilter"><option value="">All statuses</option><option value="Present">Present</option><option value="Late">Late</option><option value="Absent">Absent</option></select></label>
+                                    <label>Course <select id="attendanceCourseFilter"><option value="">All courses</option><option value="BSCS">BSCS</option><option value="BSIT">BSIT</option><option value="BSOA">BSOA</option></select></label>
+                                    <div class="filter-actions"><button class="menu-item" type="button" onclick="applyAttendanceFilters()">Apply filters</button><button class="menu-item" type="button" onclick="resetAttendanceFilters()">Reset</button></div>
+                                </div>
+                            </details>
+                            <button class="add-btn archive-school-year-btn" type="button" data-admin-only="true" onclick="openAttendanceArchiveModal()">Archive</button>
+                        </div>
+                    </div>
+
+                    <section class="table-container" aria-labelledby="attendance-table-title">
+                        <h2 id="attendance-table-title" class="sr-only">Student attendance records</h2>
+                        <table id="attendanceTable">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Student ID</th><th scope="col">Student Name</th><th scope="col">Date</th><th scope="col">Subject</th><th scope="col">Time In</th><th scope="col">Time Out</th><th scope="col">Status</th>
+                                    <th scope="col">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendanceTableBody">
+                                <tr data-course="BSCS">
+                                    <td>2026-001</td>
+                                    <td>John Cruz</td>
+                                    <td>August 22, 2026</td>
+                                    <td>Programming 1</td>
+                                    <td>7:58 AM</td>
+                                    <td>10:00 AM</td>
+                                    <td class="present">Present</td>
+                                    <td><details class="row-menu"><summary aria-label="Attendance actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button">View</button></div></details></td>
+                                </tr>
+                                <tr data-course="BSIT">
+                                    <td>2026-002</td>
+                                    <td>Maria Santos</td>
+                                    <td>August 22, 2026</td>
+                                    <td>Database</td>
+                                    <td>8:15 AM</td>
+                                    <td>10:05 AM</td>
+                                    <td class="late">Late</td>
+                                    <td><details class="row-menu"><summary aria-label="Attendance actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button">View</button></div></details></td>
+                                </tr>
+                                <tr data-course="BSOA">
+                                    <td>2026-003</td>
+                                    <td>Peter Ramos</td>
+                                    <td>August 22, 2026</td>
+                                    <td>Networking</td>
+                                    <td>--</td>
+                                    <td>--</td>
+                                    <td class="absent">Absent</td>
+                                    <td><details class="row-menu"><summary aria-label="Attendance actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button">View</button></div></details></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </section>
+                    <div class="pagination" id="attendancePagination" aria-label="Attendance pagination"></div>
+                </section>
+
+                <section id="reportView" class="view-section" hidden>
+                    <div class="title">
+                        <h1>Attendance Report</h1>
+                        <div class="view-toolbar" aria-label="Report tools">
+                            <details class="toolbar-menu">
+                                <summary class="tool-btn"><span aria-hidden="true">⚙</span> Report filters</summary>
+                                <div class="tool-popover filter-popover">
+                                    <label>From <input type="date" id="reportFromDate"></label><label>To <input type="date" id="reportToDate"></label>
+                                    <label>Day <select id="reportDayFilter"><option value="">All days</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option></select></label>
+                                    <label>Course <select id="reportCourseFilter"><option value="">All courses</option><option value="BSCS">BSCS</option><option value="BSIT">BSIT</option><option value="BSOA">BSOA</option></select></label>
+                                    <button class="menu-item" type="button" onclick="setReportToday()">Today</button>
+                                    <button class="menu-item" type="button" onclick="generateReport()">Generate report</button>
+                                </div>
+                            </details>
+                            <details class="toolbar-menu">
+                                <summary class="tool-btn"><span aria-hidden="true">•••</span> More</summary>
+                                <div class="tool-popover"><button class="menu-item" type="button" onclick="downloadReportFile()">Download PDF</button></div>
+                            </details>
+                            <button class="tool-btn report-print-button" type="button" onclick="printCurrentReport()">Print report</button>
+                            <button class="add-btn archive-school-year-btn" type="button" data-admin-only="true" onclick="openArchiveSchoolYearModal()">Archive</button>
+                        </div>
+                    </div>
+                    <p class="report-range-message" id="reportRangeMessage" aria-live="polite"></p>
+
+                    <div class="summary">
+                        <div class="card">
+                            <h2>Total Students</h2>
+                            <p>4</p>
+                        </div>
+                        <div class="card">
+                            <h2>Students with Warning</h2>
+                            <p>2</p>
+                        </div>
+                        <div class="card">
+                            <h2>Students at Risk</h2>
+                            <p>1</p>
+                        </div>
+                    </div>
+
+                    <section class="table-container">
+                        <table id="reportTable">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Student ID</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Present</th>
+                                    <th scope="col">Late</th>
+                                    <th scope="col">Absent</th>
+                                    <th scope="col">Attendance %</th>
+                                    <th scope="col">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>2026-001</td>
+                                    <td>John Cruz</td>
+                                    <td>28</td>
+                                    <td>1</td>
+                                    <td>1</td>
+                                    <td>97%</td>
+                                    <td class="good">Good Standing</td>
+                                </tr>
+                                <tr>
+                                    <td>2026-002</td>
+                                    <td>Maria Santos</td>
+                                    <td>25</td>
+                                    <td>2</td>
+                                    <td>3</td>
+                                    <td>89%</td>
+                                    <td class="warning">Warning</td>
+                                </tr>
+                                <tr>
+                                    <td>2026-003</td>
+                                    <td>Peter Ramos</td>
+                                    <td>22</td>
+                                    <td>1</td>
+                                    <td>5</td>
+                                    <td>76%</td>
+                                    <td class="danger">At Risk</td>
+                                </tr>
+                                <tr>
+                                    <td>2026-004</td>
+                                    <td>Anne Reyes</td>
+                                    <td>27</td>
+                                    <td>1</td>
+                                    <td>2</td>
+                                    <td>93%</td>
+                                    <td class="good">Good Standing</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </section>
+                </section>
+
+                <section id="overviewView" class="view-section" hidden>
+                    <div class="page-title">
+                        <div>
+                            <h1>Attendance Overview</h1>
+                            <p>Monitor attendance percentages for daily, weekly, and monthly records.</p>
+                        </div>
+                        <button class="add-btn archive-school-year-btn" type="button" data-admin-only="true" onclick="openArchiveSchoolYearModal()">Archive</button>
+                    </div>
+
+                    <div class="overview">
+                        <div class="card">
+                            <h2>📅 Daily Attendance</h2>
+                            <div class="donut daily">
+                                <div class="inner">
+                                    <h1>92%</h1>
+                                    <p>Present</p>
+                                </div>
+                            </div>
+                            <div class="legend">
+                                <div class="item">
+                                    <div class="green"></div>
+                                    Present 92%
+                                </div>
+                                <div class="item">
+                                    <div class="red"></div>
+                                    Absent 8%
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h2>📆 Weekly Attendance</h2>
+                            <div class="donut weekly">
+                                <div class="inner">
+                                    <h1>89%</h1>
+                                    <p>Present</p>
+                                </div>
+                            </div>
+                            <div class="legend">
+                                <div class="item">
+                                    <div class="green"></div>
+                                    Present 89%
+                                </div>
+                                <div class="item">
+                                    <div class="red"></div>
+                                    Absent 11%
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h2>📊 Monthly Attendance</h2>
+                            <div class="donut monthly">
+                                <div class="inner">
+                                    <h1>95%</h1>
+                                    <p>Present</p>
+                                </div>
+                            </div>
+                            <div class="legend">
+                                <div class="item">
+                                    <div class="green"></div>
+                                    Present 95%
+                                </div>
+                                <div class="item">
+                                    <div class="red"></div>
+                                    Absent 5%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="summary">
+                        <div class="summary-card">
+                            <h3>Total Students</h3>
+                            <p>350</p>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Present Today</h3>
+                            <p>322</p>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Absent Today</h3>
+                            <p>28</p>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Attendance Rate</h3>
+                            <p>92%</p>
+                        </div>
+                    </div>
+                    <p class="overview-updated" id="overviewUpdated">Updated from current attendance records.</p>
+                </section>
+
+                <section id="historyView" class="view-section" hidden>
+                    <div class="title">
+                        <div>
+                            <h1>Notification History</h1>
+                            <p>History of attendance notifications automatically sent to parents.</p>
+                        </div>
+                        <div class="view-toolbar" aria-label="History tools">
+                            <div class="toolbar-search"><span aria-hidden="true">⌕</span><input type="search" id="historySearchInput" placeholder="Search history..." aria-label="Search history" onkeyup="searchHistory()"></div>
+                            <details class="toolbar-menu"><summary class="tool-btn"><span aria-hidden="true">⚙</span> Settings</summary><div class="tool-popover"><label><input type="checkbox" id="notifyAbsent" checked> Notify parent when absent</label><label><input type="checkbox" id="notifyLate" checked> Notify parent when late</label><label><input type="checkbox" id="notifyCheckIn" checked> Notify parent on check-in</label><button class="menu-item" type="button" onclick="saveNotificationSettings()">Save settings</button></div></details>
+                            <button class="add-btn archive-school-year-btn" type="button" data-admin-only="true" onclick="openArchiveSchoolYearModal()">Archive</button>
+                        </div>
+                    </div>
+
+                    <section class="attendance-history-panel" aria-labelledby="attendanceHistoryTitle">
+                        <div class="section-heading">
+                            <div>
+                                <h2 id="attendanceHistoryTitle">Attendance History</h2>
+                                <p>Open attendance records from previous dates.</p>
+                            </div>
+                        </div>
+                        <div id="attendanceHistoryList"></div>
+                        <p class="empty-state" id="attendanceHistoryEmpty">No previous attendance records found.</p>
+                    </section>
+
+                    <section class="audit-panel" aria-labelledby="auditTitle">
+                        <h2 id="auditTitle">Recent Audit Activity</h2>
+                        <div id="auditLog"></div>
+                    </section>
+
+                    <div class="timeline" id="timeline">
+                        <div class="history-card">
+                            <div class="dot"></div>
+                            <h3>John Cruz</h3>
+                            <p class="message">
+                                Attendance notification successfully sent to the parent informing that <b>John Cruz</b> attended <b>Programming 1</b>.
+                            </p>
+                            <div class="details">
+                                <span>📅 August 7, 2026 | 🕗 7:58 AM</span>
+                                <span class="status">Delivered</span>
+                            </div>
+                        </div>
+
+                        <div class="history-card">
+                            <div class="dot"></div>
+                            <h3>Maria Santos</h3>
+                            <p class="message">
+                                Attendance notification successfully sent to the parent informing that <b>Maria Santos</b> attended <b>Database Systems</b>.
+                            </p>
+                            <div class="details">
+                                <span>📅 August 7, 2026 | 🕘 8:05 AM</span>
+                                <span class="status">Delivered</span>
+                            </div>
+                        </div>
+
+                        <div class="history-card">
+                            <div class="dot"></div>
+                            <h3>Peter Ramos</h3>
+                            <p class="message">
+                                Attendance notification successfully sent to the parent informing that <b>Peter Ramos</b> attended <b>Networking</b>.
+                            </p>
+                            <div class="details">
+                                <span>📅 August 7, 2026 | 🕗 7:51 AM</span>
+                                <span class="status">Delivered</span>
+                            </div>
+                        </div>
+
+                        <div class="history-card">
+                            <div class="dot"></div>
+                            <h3>Anne Reyes</h3>
+                            <p class="message">
+                                Attendance notification successfully sent to the parent informing that <b>Anne Reyes</b> attended <b>Computer Programming</b>.
+                            </p>
+                            <div class="details">
+                                <span>📅 August 7, 2026 | 🕗 7:54 AM</span>
+                                <span class="status">Delivered</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="scheduleView" class="view-section" hidden>
+                    <div class="title">
+                        <h1>Class Schedule</h1>
+                        <div class="view-toolbar" aria-label="Schedule tools">
+                            <details class="toolbar-menu">
+                                <summary class="tool-btn"><span aria-hidden="true">⚙</span> Filter</summary>
+                                <div class="tool-popover filter-popover">
+                                    <label>Day <select id="scheduleDayFilter"><option value="">All days</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option></select></label>
+                                    <label>Instructor <input type="search" id="scheduleInstructorFilter" placeholder="All instructors"></label>
+                                    <label>Subject <input type="search" id="scheduleSubjectFilter" placeholder="All subjects"></label>
+                                    <label>Room <input type="search" id="scheduleRoomFilter" placeholder="All rooms"></label>
+                                    <button class="menu-item" type="button" onclick="resetScheduleFilters()">Reset filters</button>
+                                </div>
+                            </details>
+                            <details class="toolbar-menu">
+                                <summary class="tool-btn"><span aria-hidden="true">•••</span> More</summary>
+                                <div class="tool-popover"><button class="menu-item" type="button" onclick="resetScheduleFilters()">Reset view</button><button class="menu-item" type="button" onclick="refreshDashboard()">Refresh data</button></div>
+                            </details>
+                            <div class="toolbar-actions">
+                                <button class="add-btn archive-school-year-btn" type="button" data-admin-only="true" onclick="openArchiveSchoolYearModal()">Archive</button>
+                                <button class="add-btn toolbar-primary" type="button" data-admin-only="true" onclick="openModal()">+ Add Schedule</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <section class="table-container">
+                        <table id="scheduleTable">
+                            <thead>
+                                <tr>
+                                    <th scope="col">School Year</th>
+                                    <th scope="col">Subject</th>
+                                    <th scope="col">Instructor</th>
+                                    <th scope="col">Room</th>
+                                    <th scope="col">Day</th>
+                                    <th scope="col">Time</th>
+                                    <th scope="col">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scheduleTableBody">
+                                <tr>
+                                    <td>2026-2027</td>
+                                    <td>Programming 1</td>
+                                    <td>Prof. Santos</td>
+                                    <td>Lab 1</td>
+                                    <td>Monday</td>
+                                    <td>8:00 - 10:00</td>
+                                    <td>
+                                        <details class="row-menu"><summary aria-label="Schedule actions">•••</summary><div class="row-menu__content"><button class="menu-item edit-btn" type="button" onclick="editRow(this)">Edit</button><button class="menu-item delete-btn" type="button" onclick="openDeleteModal(this)">Delete</button></div></details>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </section>
+                </section>
+            </main>
+        </div>
+
+        <div class="modal" id="archiveSchoolYearModal" aria-hidden="true">
+            <div class="modal-content confirm-modal-content">
+                <h2>Archive</h2>
+                <p class="profile-note">Choose or enter the two years for these archived student records.</p>
+                <label for="archiveCourse">Course
+                    <select id="archiveCourse" aria-label="Course to archive">
+                        <option value="">All courses</option>
+                        <option value="BSCS">BSCS</option>
+                        <option value="BSIT">BSHM</option>
+                        <option value="BSOA">BSBA</option>
+                        <option value="BSOA">BSED</option>
+                    </select>
+                </label>
+                <div class="school-year-fields">
+                    <label for="archiveStartYear">From
+                        <select id="archiveStartYear" aria-label="School year start">
+                            <option value="2024">2024</option><option value="2025">2025</option><option value="2026" selected>2026</option><option value="2027">2027</option><option value="2028">2028</option><option value="2029">2029</option><option value="2030">2030</option><option value="2031">2031</option><option value="2032">2032</option><option value="2033">2033</option><option value="2034">2034</option><option value="2035">2035</option>
+                        </select>
+                    </label>
+                    <span class="school-year-separator" aria-hidden="true">-</span>
+                    <label for="archiveEndYear">To
+                        <select id="archiveEndYear" aria-label="School year end">
+                            <option value="2025">2025</option><option value="2026">2026</option><option value="2027" selected>2027</option><option value="2028">2028</option><option value="2029">2029</option><option value="2030">2030</option><option value="2031">2031</option><option value="2032">2032</option><option value="2033">2033</option><option value="2034">2034</option><option value="2035">2035</option><option value="2036">2036</option>
+                        </select>
+                    </label>
+                </div>
+                <button class="save-btn" type="button" onclick="confirmArchiveSchoolYear()">Archive</button>
+                <button class="close-btn" type="button" onclick="closeArchiveSchoolYearModal()">Cancel</button>
+            </div>
+        </div>
+
+        <div class="modal" id="attendanceArchiveModal" aria-hidden="true">
+            <div class="modal-content confirm-modal-content">
+                <h2>Archive</h2>
+                <p class="profile-note">Archive all attendance records for <strong id="attendanceArchiveDateLabel"></strong>?</p>
+                <div class="school-year-fields">
+                    <label for="attendanceArchiveStartYear">From
+                        <select id="attendanceArchiveStartYear" aria-label="Attendance archive school year start">
+                            <option value="2024">2024</option><option value="2025">2025</option><option value="2026" selected>2026</option><option value="2027">2027</option><option value="2028">2028</option><option value="2029">2029</option><option value="2030">2030</option><option value="2031">2031</option><option value="2032">2032</option><option value="2033">2033</option><option value="2034">2034</option><option value="2035">2035</option>
+                        </select>
+                    </label>
+                    <span class="school-year-separator" aria-hidden="true">-</span>
+                    <label for="attendanceArchiveEndYear">To
+                        <select id="attendanceArchiveEndYear" aria-label="Attendance archive school year end">
+                            <option value="2025">2025</option><option value="2026">2026</option><option value="2027" selected>2027</option><option value="2028">2028</option><option value="2029">2029</option><option value="2030">2030</option><option value="2031">2031</option><option value="2032">2032</option><option value="2033">2033</option><option value="2034">2034</option><option value="2035">2035</option><option value="2036">2036</option>
+                        </select>
+                    </label>
+                </div>
+                <button class="save-btn" type="button" onclick="confirmAttendanceArchive()">Archive</button>
+                <button class="close-btn" type="button" onclick="closeAttendanceArchiveModal()">Cancel</button>
+            </div>
+        </div>
+
+        <div class="modal" id="modal" aria-hidden="true">
+            <div class="modal-content">
+                <div class="modal-heading-row"><h2 id="modalTitle">Add Schedule</h2><button class="modal-icon-close" type="button" aria-label="Close schedule form" onclick="closeModal()">×</button></div>
+                <input type="text" id="subject" placeholder="Subject">
+                <input type="text" id="teacher" placeholder="Instructor">
+                <input type="text" id="room" placeholder="Room">
+                <input type="text" id="scheduleSchoolYear" placeholder="School year (e.g. 2026-2027)" inputmode="numeric" required>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="day">Day</label>
+                        <select id="day" aria-label="Select a day">
+                            <option value="">Select Day</option>
+                            <option value="Monday">Monday</option>
+                            <option value="Tuesday">Tuesday</option>
+                            <option value="Wednesday">Wednesday</option>
+                            <option value="Thursday">Thursday</option>
+                            <option value="Friday">Friday</option>
+                            <option value="Saturday">Saturday</option>
+                            <option value="Sunday">Sunday</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="startTime">Start Time</label>
+                        <input type="time" id="startTime">
+                    </div>
+                    <div class="form-group">
+                        <label for="endTime">End Time</label>
+                        <input type="time" id="endTime">
+                    </div>
+                </div>
+                <button class="save-btn" id="saveScheduleBtn" type="button" onclick="addSchedule()">Save Schedule</button>
+                <button class="close-btn" type="button" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+
+        <div class="modal" id="studentModal" aria-hidden="true">
+            <div class="modal-content">
+                <div class="modal-heading-row"><h2>Add Student</h2><button class="modal-icon-close" type="button" aria-label="Close student form" onclick="closeStudentModal()">×</button></div>
+                <input type="text" id="studentId" placeholder="Student ID">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="studentFirstName">First name</label>
+                        <input type="text" id="studentFirstName" placeholder="First name">
+                    </div>
+                    <div class="form-group">
+                        <label for="studentMiddleName">Middle name</label>
+                        <input type="text" id="studentMiddleName" placeholder="Middle name">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="studentLastName">Last name</label>
+                    <input type="text" id="studentLastName" placeholder="Last name">
+                </div>
+                <input type="text" id="course" placeholder="Course">
+                <div class="school-year-fields student-school-year-fields">
+                    <label for="studentSchoolYearStart">Start year
+                        <input type="number" id="studentSchoolYearStart" placeholder="2026" min="2000" max="2100" required>
+                    </label>
+                    <span class="school-year-separator" aria-hidden="true">-</span>
+                    <label for="studentSchoolYearEnd">End year
+                        <input type="number" id="studentSchoolYearEnd" placeholder="2027" min="2000" max="2100" required>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="parentPhone">Parent's phone number</label>
+                    <input type="tel" id="parentPhone" placeholder="+63 912 345 6789" autocomplete="tel" inputmode="tel" maxlength="17" required>
+                    <small class="field-help">Use the international format when possible for future SMS alerts.</small>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="year">Year</label>
+                        <select id="year">
+                            <option value="">Select year</option>
+                            <option value="1st Year">1st Year</option>
+                            <option value="2nd Year">2nd Year</option>
+                            <option value="3rd Year">3rd Year</option>
+                            <option value="4th Year">4th Year</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="status">Status</label>
+                        <select id="status">
+                            <option value="">Select status</option>
+                            <option value="Regular">Regular</option>
+                            <option value="Irregular">Irregular</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group face-photo-field">
+                    <label for="facePhoto">Student face photo</label>
+                    <input type="file" id="facePhoto" accept="image/jpeg,image/png,image/webp" capture="user" required>
+                    <small>Use a clear, front-facing photo for recognition.</small>
+                </div>
+                <button class="save-btn" type="button" onclick="addStudent()">Save Student</button>
+                <button class="close-btn" type="button" onclick="closeStudentModal()">Cancel</button>
+            </div>
+        </div>
+
+        <div class="modal" id="profileModal" aria-hidden="true">
+            <div class="modal-content profile-content">
+                <h2>Student Profile</h2>
+                <div id="profileDetails"></div>
+                <button class="close-btn" type="button" onclick="closeProfileModal()">Close</button>
+            </div>
+        </div>
+
+        <div class="modal" id="adminProfileModal" aria-hidden="true">
+            <div class="modal-content admin-profile-content">
+                <div class="modal-heading-row"><div><p class="modal-eyebrow">Account</p><h2>My Profile</h2></div><button class="modal-icon-close" type="button" aria-label="Close profile" onclick="closeAdminProfile()">×</button></div>
+                <div class="profile-photo-editor">
+                    <div class="admin-profile-photo" id="adminProfilePhotoPreview" aria-hidden="true">👤</div>
+                    <div><label class="upload-photo-button" for="adminProfilePhoto">Upload profile photo</label><input type="file" id="adminProfilePhoto" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG, or WebP up to 2 MB.</small></div>
+                </div>
+                <div class="profile-form-grid">
+                    <label>Full name<input type="text" id="profileName" required></label>
+                    <label>Email address<input type="email" id="profileEmail" readonly></label>
+                    <label>Role<input type="text" id="profileRole" readonly></label>
+                </div>
+                <p class="settings-message" id="profileMessage" role="status"></p>
+                <button class="save-btn" type="button" onclick="saveAdminProfile()">Save profile</button>
+                <button class="close-btn" type="button" onclick="closeAdminProfile()">Cancel</button>
+            </div>
+        </div>
+
+        <div class="modal" id="settingsModal" aria-hidden="true">
+            <div class="modal-content settings-content">
+                <div class="modal-heading-row"><div><p class="modal-eyebrow">Account</p><h2>Account Settings</h2></div><button class="modal-icon-close" type="button" aria-label="Close account settings" onclick="closeSettings()">×</button></div>
+                <div class="settings-section"><h3>Account Settings</h3><p class="settings-description">Change the password used to sign in to the administrator account.</p><label class="setting-field">Current password<input type="password" id="settingsCurrentPassword" autocomplete="current-password" required></label><label class="setting-field">New password<input type="password" id="settingsNewPassword" minlength="6" autocomplete="new-password" required></label><label class="setting-field">Confirm new password<input type="password" id="settingsConfirmPassword" minlength="6" autocomplete="new-password" required></label><small class="settings-help">Use at least 6 characters. Your current password is required to confirm this change.</small></div>
+                <p class="settings-message" id="settingsMessage" role="status"></p>
+                <button class="save-btn" type="button" onclick="saveAdminSettings()">Change password</button>
+                <button class="close-btn" type="button" onclick="closeSettings()">Cancel</button>
+            </div>
+        </div>
+
+        <div class="modal" id="deleteConfirmModal" aria-hidden="true">
+            <div class="modal-content confirm-modal-content">
+                <h2>Delete Schedule?</h2>
+                <p>This action cannot be undone.</p>
+                <div class="confirm-actions">
+                    <button class="save-btn" type="button" onclick="confirmDelete()">Yes, Delete</button>
+                    <button class="close-btn" type="button" onclick="closeDeleteModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </body>
+</html><?php /**PATH C:\Users\ASUS\face-racognition-attendance-system\laravel\resources\views/attendance-app.blade.php ENDPATH**/ ?>

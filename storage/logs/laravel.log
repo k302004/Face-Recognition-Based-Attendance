@@ -1,0 +1,16 @@
+[2026-09-09 02:56:30] local.ERROR: The "--compact" option does not exist. {"exception":"[object] (Symfony\\Component\\Console\\Exception\\RuntimeException(code: 0): The \"--compact\" option does not exist. at C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/symfony/console/Input/ArgvInput.php:226)
+[stacktrace]
+#0 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/symfony/console/Input/ArgvInput.php(155): Symfony/Component/Console/Input/ArgvInput->addLongOption('compact', NULL)
+#1 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/symfony/console/Input/ArgvInput.php(88): Symfony/Component/Console/Input/ArgvInput->parseLongOption('--compact')
+#2 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/symfony/console/Input/ArgvInput.php(77): Symfony/Component/Console/Input/ArgvInput->parseToken('--compact', true)
+#3 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/symfony/console/Input/Input.php(53): Symfony/Component/Console/Input/ArgvInput->parse()
+#4 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/symfony/console/Command/Command.php(238): Symfony/Component/Console/Input/Input->bind(Object(Symfony/Component/Console/Input/InputDefinition))
+#5 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/laravel/framework/src/Illuminate/Console/Command.php(261): Symfony/Component/Console/Command/Command->run(Object(Symfony/Component/Console/Input/ArgvInput), Object(Laravel/Pao/Laravel/PaoOutputStyle))
+#6 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/symfony/console/Application.php(1144): Illuminate/Console/Command->run(Object(Symfony/Component/Console/Input/ArgvInput), Object(Symfony/Component/Console/Output/ConsoleOutput))
+#7 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/symfony/console/Application.php(379): Symfony/Component/Console/Application->doRunCommand(Object(Illuminate/Foundation/Console/RouteListCommand), Object(Symfony/Component/Console/Input/ArgvInput), Object(Symfony/Component/Console/Output/ConsoleOutput))
+#8 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/symfony/console/Application.php(218): Symfony/Component/Console/Application->doRun(Object(Symfony/Component/Console/Input/ArgvInput), Object(Symfony/Component/Console/Output/ConsoleOutput))
+#9 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/laravel/framework/src/Illuminate/Foundation/Console/Kernel.php(198): Symfony/Component/Console/Application->run(Object(Symfony/Component/Console/Input/ArgvInput), Object(Symfony/Component/Console/Output/ConsoleOutput))
+#10 C:/Users/ASUS/face-racognition-attendance-system/laravel/vendor/laravel/framework/src/Illuminate/Foundation/Application.php(1242): Illuminate/Foundation/Console/Kernel->handle(Object(Symfony/Component/Console/Input/ArgvInput), Object(Symfony/Component/Console/Output/ConsoleOutput))
+#11 C:/Users/ASUS/face-racognition-attendance-system/laravel/artisan(16): Illuminate/Foundation/Application->handleCommand(Object(Symfony/Component/Console/Input/ArgvInput))
+#12 {main}
+"} 
