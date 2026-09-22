@@ -5,14 +5,14 @@ Dim shell, fileSystem, appDir, phpExe, command, http, serverReady, wmi, startup,
 Set shell = CreateObject("WScript.Shell")
 Set fileSystem = CreateObject("Scripting.FileSystemObject")
 appDir = fileSystem.GetParentFolderName(WScript.ScriptFullName)
-phpExe = appDir & "\php\php.exe"
+phpExe = shell.ExpandEnvironmentStrings("%USERPROFILE%") & "\.config\herd-lite\bin\php.exe"
 
 If Not fileSystem.FileExists(phpExe) Then
-    phpExe = FindPhpOnPath(fileSystem, shell)
+    phpExe = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Microsoft\WinGet\Packages\PHP.PHP.8.4_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe"
 End If
 
-If phpExe = "" Then
-    MsgBox "PHP runtime was not found. Please ensure the php folder is beside this launcher.", 16, "Attendance System"
+If Not fileSystem.FileExists(phpExe) Then
+    MsgBox "PHP 8.4 or newer was not found. Install PHP 8.4+ or Herd Lite, then run this launcher again.", 16, "Attendance System"
     WScript.Quit 1
 End If
 
@@ -20,20 +20,14 @@ serverReady = False
 On Error Resume Next
 Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
 http.SetTimeouts 300, 300, 300, 300
-http.Open "GET", "http://127.0.0.1:8080/index.html", False
+http.Open "GET", "http://127.0.0.1:8000/", False
 http.Send
 serverReady = (Err.Number = 0 And http.Status = 200)
-Err.Clear
-If serverReady Then
-    http.Open "GET", "http://127.0.0.1:8080/api.php?action=device-attendance", False
-    http.Send
-    serverReady = (Err.Number = 0 And http.Status <> 404)
-End If
 Err.Clear
 On Error GoTo 0
 
 If Not serverReady Then
-    command = """" & phpExe & """ -S 0.0.0.0:8080 -t """ & appDir & """"
+    command = """" & phpExe & """ artisan serve --host=127.0.0.1 --port=8000"
     Set wmi = GetObject("winmgmts:\\.\root\cimv2")
     Set startup = wmi.Get("Win32_ProcessStartup").SpawnInstance_
     startup.ShowWindow = 0
@@ -43,25 +37,10 @@ If Not serverReady Then
     WScript.Sleep 1500
 End If
 
-shell.Run "http://127.0.0.1:8080/index.html?v=" & Replace(CStr(Timer), ".", ""), 1, False
+shell.Run "http://127.0.0.1:8000/?v=" & Replace(CStr(Timer), ".", ""), 1, False
 Set http = Nothing
 Set startup = Nothing
 Set wmi = Nothing
 Set fileSystem = Nothing
 Set shell = Nothing
 
-Function FindPhpOnPath(fileSystem, shell)
-    Dim pathValue, folder, candidate
-    pathValue = shell.Environment("Process")("PATH")
-    For Each folder In Split(pathValue, ";")
-        folder = Trim(folder)
-        If folder <> "" Then
-            candidate = folder & "\php.exe"
-            If fileSystem.FileExists(candidate) Then
-                FindPhpOnPath = candidate
-                Exit Function
-            End If
-        End If
-    Next
-    FindPhpOnPath = ""
-End Function

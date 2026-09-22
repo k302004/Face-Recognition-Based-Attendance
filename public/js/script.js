@@ -1,5 +1,6 @@
 const REMEMBER_KEY = 'drlcefiRememberedLogin';
 const SETTINGS_KEY = 'drlcefiDashboardSettings';
+const THEME_KEY = 'drlcefiTheme';
 let dashboardData = { students: [], schedules: [], attendance: [], audit: [], notificationSettings: {} };
 let archivedYear = '';
 let archivedCategory = 'students';
@@ -7,6 +8,33 @@ let editingRow = null;
 let currentUser = null;
 let sessionTimer = null;
 let loginLockoutTimer = null;
+
+function applyTheme(theme) {
+    const isDark = theme === 'dark';
+    document.body.dataset.theme = isDark ? 'dark' : 'light';
+    document.querySelectorAll('.theme-toggle').forEach(function (toggle) {
+        toggle.textContent = isDark ? 'Light mode' : 'Dark mode';
+        toggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+    });
+}
+
+function initializeTheme() {
+    const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
+    applyTheme(savedTheme);
+    document.querySelectorAll('.theme-toggle').forEach(function (toggle) {
+        toggle.addEventListener('click', function () {
+            const nextTheme = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem(THEME_KEY, nextTheme);
+            document.body.classList.add('theme-switching');
+            applyTheme(nextTheme);
+            window.setTimeout(function () {
+                document.body.classList.remove('theme-switching');
+            }, 460);
+        });
+    });
+}
+
+initializeTheme();
 
 function getSurname(name) {
     const parts = String(name).trim().split(/\s+/);

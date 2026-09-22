@@ -7,13 +7,17 @@
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,600;6..96,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="{{ asset('css/style.css') }}">
+        <link rel="stylesheet" href="{{ asset('css/style.css') }}?v={{ filemtime(public_path('css/style.css')) }}">
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-        <script src="{{ asset('js/script.js') }}" defer></script>
+        <script src="{{ asset('js/script.js') }}?v={{ filemtime(public_path('js/script.js')) }}" defer></script>
     </head>
 
     <body>
         <main class="auth-screen" id="authScreen">
+            <button class="theme-toggle auth-theme-toggle" id="authThemeToggle" type="button" aria-label="Switch to dark mode">Dark mode</button>
+            <div class="auth-illustration" aria-hidden="true">
+                <img src="{{ asset('images/student%20.jpg') }}" alt="">
+            </div>
             <section class="auth-card" aria-labelledby="authTitle">
                 <div class="auth-brand">DRLCEFI</div>
                 <h1 id="authTitle">Welcome back</h1>
@@ -26,7 +30,7 @@
 
                 <form class="auth-form" id="loginForm">
                     <label for="loginEmail">Email address</label>
-                    <input type="email" id="loginEmail" autocomplete="email" placeholder="you@example.com" required>
+                    <input type="email" id="loginEmail" autocomplete="email" placeholder="drlcefattendance@gmail.com" required>
                     <label for="loginPassword">Password</label>
                     <input type="password" id="loginPassword" autocomplete="current-password" placeholder="Enter your password" required>
                     <label class="remember-option" for="rememberPassword">
@@ -45,7 +49,7 @@
                         </div>
                     </div>
                     <label for="resetEmail">Email address</label>
-                    <input type="email" id="resetEmail" autocomplete="email" placeholder="you@example.com" required>
+                    <input type="email" id="resetEmail" autocomplete="email" placeholder="drlcefattendance@gmail.com" required>
                     <div id="resetVerificationFields" hidden>
                         <label for="resetCode">Verification code</label>
                         <input type="text" id="resetCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="Enter 6-digit code" maxlength="6">
@@ -64,7 +68,7 @@
                         <input type="text" id="signupFullName" autocomplete="name" placeholder="Full name" required>
                     </div>
                     <label for="signupEmail">Email address</label>
-                    <input type="email" id="signupEmail" autocomplete="email" placeholder="you@example.com" required>
+                    <input type="email" id="signupEmail" autocomplete="email" placeholder="drlcefattendance@gmail.com" required>
                     <label for="signupPassword">Password</label>
                     <input type="password" id="signupPassword" autocomplete="new-password" placeholder="At least 6 characters" minlength="6" required>
                     <button class="auth-submit" type="submit">Create account</button>
@@ -79,7 +83,7 @@
         <div class="page-shell" id="appShell" hidden>
             <header class="site-header">
                 <div class="site-header__inner">
-                    <a class="logo" href="index.html" aria-label="DRLCEFI home">
+                    <a class="logo nav-link active" href="#" data-view="home" aria-label="DRLCEFI home">
                         <span>DRLCEFI</span>
                     </a>
 
@@ -95,6 +99,7 @@
                         </ul>
                     </nav>
 
+                    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode">Dark mode</button>
                     <div class="admin">
                         <button class="admin-btn" type="button" aria-expanded="false" aria-controls="menu" onclick="toggleMenu()">
                             <span class="admin-icon" aria-hidden="true">👤</span>
