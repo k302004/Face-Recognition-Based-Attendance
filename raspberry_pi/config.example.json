@@ -5,9 +5,14 @@
   "subject": "Programming 1",
   "camera_index": 0,
   "match_tolerance": 0.48,
-  "scan_seconds": 2,
+  "scan_seconds": 5,
+  "process_every_n_frames": 3,
   "sms_enabled": false,
   "sms_port": "/dev/ttyUSB2",
   "sms_baud": 115200,
-  "sms_message": "{name} checked in for {subject} at {time}."
+  "sms_message": "{name} checked in for {subject} at {time}.",
+  "_comments": {
+    "scan_seconds": "Base interval between frame reads (seconds). Higher = less CPU/heat. Default 5s.",
+    "process_every_n_frames": "Process only 1 in N frames for face detection. 3 = 66% less CPU. Higher = less heat but may miss fast movement."
+  }
 }
