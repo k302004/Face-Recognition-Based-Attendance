@@ -1,63 +1,51 @@
-<<<<<<< HEAD
 # Face Recognition Attendance System
-thesis project - "Developing and Pilot Testing of Face Recognition-Based Attendance and Feedback System
-=======
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Thesis project: "Developing and Pilot Testing of Face Recognition-Based Attendance and Feedback System"
 
-## About Laravel
+## Overview
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+This project is a full attendance management system built around face recognition, student tracking, and schedule monitoring. It supports:
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- Administrator login and account management
+- Student enrollment with face image capture
+- Attendance recording by subject and date
+- Schedule creation, maintenance, and archival
+- Attendance reports and archive/history views
+- Password reset through email verification
+- Optional Raspberry Pi device integration for on-site attendance capture
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Project structure
 
-## Learning Laravel
+- `api.php` – main attendance API and request handlers
+- `db.php` – SQLite schema initialization and database setup
+- `index.html` and `script.js` – attendance dashboard frontend
+- `public/` – static assets, images, and served files
+- `raspberry_pi/` – Raspberry Pi client and setup instructions
+- `php/` – portable PHP runtime used for local Windows deployment
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Local startup
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+For the packaged Windows setup:
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+1. Double-click `Start Attendance.vbs`.
+2. Open the app at `http://127.0.0.1:8080`.
+3. When finished, double-click `Stop Attendance.vbs`.
 
-## Agentic Development
+Keep the app folder together, including the `php` directory and the `attendance.sqlite` database file.
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Password reset email setup
 
-```bash
-composer require laravel/boost --dev
+1. Copy `mail-config.php.example` to `mail-config.php`.
+2. Update the SMTP details for the email account that sends verification codes.
+3. For Gmail, use an App Password instead of the regular password.
+4. Restart the app and test the Forgot password flow.
 
-php artisan boost:install
-```
+## Raspberry Pi integration
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+The Raspberry Pi client and deployment notes are located in the `raspberry_pi/` directory. Read the setup guide there before connecting the device.
 
-## Contributing
+## Notes
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
->>>>>>> 2b67dca4ba7b52dc1beb8d4f9a5dbdd73fdc9dd9
+- The database file is `attendance.sqlite`.
+- Student face images are stored in the `face_images` folder.
+- Back up the database and `face_images` folder while the app is stopped.
