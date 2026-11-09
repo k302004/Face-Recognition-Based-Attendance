@@ -97,6 +97,7 @@
                             <li><a href="#" class="nav-link" data-view="history">History</a></li>
                             <li><a href="#" class="nav-link" data-view="archives">Archives</a></li>
                             <li><a href="#" class="nav-link" data-view="setups">Setups</a></li>
+                            <li><a href="#" class="nav-link" data-view="student-registration">Student Registration</a></li>
                         </ul>
                     </nav>
 
@@ -650,7 +651,98 @@
                         <div id="cameraConfigSummary" class="setup-summary"></div>
                     </section>
                 </section>
-            </main>
+
+                 <section id="studentRegistrationView" class="view-section" hidden>
+                     <div class="title">
+                         <h1>Student Registration</h1>
+                         <p>Register a student and capture face images from multiple angles.</p>
+                     </div>
+                     <div class="registration-layout">
+                         <form id="studentRegistrationForm" class="registration-form" onsubmit="return false;">
+                             <div class="form-row">
+                                 <div class="form-group">
+                                     <label for="regStudentId">Student ID</label>
+                                     <input type="text" id="regStudentId" placeholder="Student ID" required>
+                                 </div>
+                                 <div class="form-group">
+                                     <label for="regFirstName">First name</label>
+                                     <input type="text" id="regFirstName" placeholder="First name" required>
+                                 </div>
+                             </div>
+                             <div class="form-row">
+                                 <div class="form-group">
+                                     <label for="regMiddleName">Middle name</label>
+                                     <input type="text" id="regMiddleName" placeholder="Middle name">
+                                 </div>
+                                 <div class="form-group">
+                                     <label for="regLastName">Last name</label>
+                                     <input type="text" id="regLastName" placeholder="Last name" required>
+                                 </div>
+                             </div>
+                             <div class="form-row">
+                                 <div class="form-group">
+                                     <label for="regCourse">Course</label>
+                                     <input type="text" id="regCourse" placeholder="Course" required>
+                                 </div>
+                                 <div class="form-group">
+                                     <label for="regYear">Year</label>
+                                     <select id="regYear" required>
+                                         <option value="">Select year</option>
+                                         <option value="1st Year">1st Year</option>
+                                         <option value="2nd Year">2nd Year</option>
+                                         <option value="3rd Year">3rd Year</option>
+                                         <option value="4th Year">4th Year</option>
+                                     </select>
+                                 </div>
+                             </div>
+                             <div class="school-year-fields student-school-year-fields">
+                                 <label for="regSchoolYearStart">Start year
+                                     <input type="number" id="regSchoolYearStart" placeholder="2026" min="2000" max="2100" required>
+                                 </label>
+                                 <span class="school-year-separator" aria-hidden="true">-</span>
+                                 <label for="regSchoolYearEnd">End year
+                                     <input type="number" id="regSchoolYearEnd" placeholder="2027" min="2000" max="2100" required>
+                                 </label>
+                             </div>
+                             <div class="form-group">
+                                 <label for="regParentPhone">Parent's phone number</label>
+                                 <input type="tel" id="regParentPhone" placeholder="+63 912 345 6789" required>
+                             </div>
+                             <div class="form-group">
+                                 <label for="regStatus">Status</label>
+                                 <select id="regStatus" required>
+                                     <option value="">Select status</option>
+                                     <option value="Regular">Regular</option>
+                                     <option value="Irregular">Irregular</option>
+                                 </select>
+                             </div>
+                         </form>
+
+                         <div class="registration-capture">
+                             <div class="camera-preview">
+                                 <img id="registrationVideo" alt="camera preview">
+                                 <canvas id="registrationCanvas" hidden></canvas>
+                                 <div class="face-oval-guide" aria-hidden="true"></div>
+                             </div>
+                             <div class="capture-actions">
+                                 <span id="registrationPoseStatus" class="setup-status">Pose: none</span>
+                                 <button class="tool-btn" type="button" onclick="startRegistrationCamera()">Start Camera</button>
+                                 <button class="tool-btn" type="button" onclick="stopRegistrationCamera()">Stop Camera</button>
+                                 <button class="tool-btn" type="button" onclick="captureRegistrationAngle('front')">Capture Front</button>
+                                 <button class="tool-btn" type="button" onclick="captureRegistrationAngle('down')">Look Down</button>
+                                 <button class="tool-btn" type="button" onclick="captureRegistrationAngle('right')">Look Right</button>
+                                 <button class="tool-btn" type="button" onclick="captureRegistrationAngle('left')">Look Left</button>
+                                 <button class="tool-btn" type="button" onclick="captureRegistrationAngle('up')">Look Up</button>
+                             </div>
+                             <div id="registrationLoading" class="registration-loading" hidden>
+                                 <span class="spinner"></span> Registering student...
+                             </div>
+                             <div id="registrationCaptures" class="registration-captures"></div>
+                             <button class="save-btn" type="button" onclick="submitStudentRegistration()">Register Student</button>
+                         </div>
+                     </div>
+                 </section>
+             </main>
         </div>
 
         <div class="modal" id="archiveSchoolYearModal" aria-hidden="true">

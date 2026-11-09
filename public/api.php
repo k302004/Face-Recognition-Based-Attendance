@@ -378,20 +378,32 @@ if ($method === 'POST' && $action === 'student') {
     }
     $imageDirectory = __DIR__ . DIRECTORY_SEPARATOR . 'face_images';
     if (!is_dir($imageDirectory) && !mkdir($imageDirectory, 0755, true)) reply(['message' => 'Unable to create the face photo folder.'], 500);
-    $relativeImagePath = null;
-    $facePhoto = (string) ($payload['facePhoto'] ?? '');
-    if ($facePhoto !== '') {
+    $relativeImagePaths = [];
+
+    $facePhotos = [];
+    if (isset($payload['facePhotos']) && is_array($payload['facePhotos'])) {
+        $facePhotos = $payload['facePhotos'];
+    } elseif (isset($payload['facePhoto']) && (string) $payload['facePhoto'] !== '') {
+        $facePhotos = [(string) $payload['facePhoto']];
+    }
+
+    $photoIndex = 0;
+    foreach ($facePhotos as $facePhoto) {
+        $facePhoto = (string) $facePhoto;
+        if ($facePhoto === '') continue;
         if (!preg_match('/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+\/=]+)$/', $facePhoto, $matches)) reply(['message' => 'Please provide a valid face photo (JPG, PNG, or WebP).'], 400);
         $imageData = base64_decode($matches[2], true);
         if ($imageData === false || strlen($imageData) > 5 * 1024 * 1024) reply(['message' => 'The face photo must be 5 MB or smaller.'], 400);
         $imageInfo = @getimagesizefromstring($imageData);
         if (!$imageInfo || !in_array($imageInfo['mime'], ['image/jpeg', 'image/png', 'image/webp'], true)) reply(['message' => 'The face photo is not a supported image.'], 400);
         $extension = $matches[1] === 'jpeg' ? 'jpg' : $matches[1];
-        $imageName = hash('sha256', $studentId) . '.' . $extension;
+        $imageName = hash('sha256', $studentId . '_' . $photoIndex) . '.' . $extension;
         $imagePath = $imageDirectory . DIRECTORY_SEPARATOR . $imageName;
         if (file_put_contents($imagePath, $imageData) === false) reply(['message' => 'Unable to save the face photo.'], 500);
-        $relativeImagePath = 'face_images/' . $imageName;
+        $relativeImagePaths[] = 'face_images/' . $imageName;
+        $photoIndex++;
     }
+    $relativeImagePath = $relativeImagePaths ? implode(',', $relativeImagePaths) : null;
 
     if ($existingId !== '') {
         $existingStudent = $db->prepare('SELECT student_id, face_image_path FROM students WHERE id = ? LIMIT 1');
@@ -449,9 +461,13 @@ if ($method === 'POST' && $action === 'delete-student') {
     $student = $statement->fetch();
     
     if ($student && $student['face_image_path']) {
-        $imagePath = __DIR__ . DIRECTORY_SEPARATOR . $student['face_image_path'];
-        if (file_exists($imagePath)) {
-            @unlink($imagePath);
+        foreach (explode(',', (string) $student['face_image_path']) as $path) {
+            $path = trim($path);
+            if ($path === '') continue;
+            $imagePath = __DIR__ . DIRECTORY_SEPARATOR . $path;
+            if (file_exists($imagePath)) {
+                @unlink($imagePath);
+            }
         }
     }
     
@@ -603,12 +619,20 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
     if (is_file($pidFile)) {
         $existingPid = (int) trim((string) file_get_contents($pidFile));
         if ($existingPid > 0) {
-            shell_exec('kill ' . $existingPid . ' 2>/dev/null');
+            if (stripos(PHP_OS, 'WIN') === 0) {
+                shell_exec('taskkill /PID ' . $existingPid . ' /F 2>nul');
+            } else {
+                shell_exec('kill ' . $existingPid . ' 2>/dev/null');
+            }
         }
         @unlink($pidFile);
     }
     // Also stop any stray stream processes so the new dimensions take effect.
-    shell_exec('pkill -f camera_stream.py 2>/dev/null');
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        shell_exec('taskkill /F /IM python.exe /FI "WINDOWTITLE eq camera_stream*" 2>nul');
+    } else {
+        shell_exec('pkill -f "[c]amera_stream.py" 2>/dev/null');
+    }
     usleep(300000);
 
     $cameraIndex = 0;
@@ -654,17 +678,28 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
             $alive = trim((string) $check) === 'running';
         }
     }
+    // Even if the process is alive, verify it actually serves frames.
+    // Background processes on macOS often lack camera permission and silently fail.
+    if ($alive) {
+        $feedCheck = trim((string) shell_exec('curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:' . $port . '/video_feed 2>/dev/null'));
+        if ($feedCheck !== '200') {
+            $alive = false;
+        }
+    }
     if (!$alive) {
         if (stripos(PHP_OS, 'WIN') === 0) {
             // On Windows, give the already-launched process more time, then check.
-            usleep(2000000);
+            usleep(5000000);
         } else {
             // macOS may block camera access for the web server process. Fall back to
             // launching the script in Terminal, which usually already has permission.
+            if ($pid > 0) shell_exec('kill ' . $pid . ' 2>/dev/null');
+            shell_exec('pkill -f "[c]amera_stream.py" 2>/dev/null');
+            usleep(300000);
             $terminalCommand = 'cd ' . escapeshellarg(dirname(__DIR__)) . ' && ' . $python . ' ' . escapeshellarg($script) . ' ' . escapeshellarg((string) $cameraIndex) . ' ' . escapeshellarg((string) $port) . ' ' . escapeshellarg((string) $targetWidth) . ' ' . escapeshellarg((string) $targetHeight);
-            $osascript = 'osascript -e ' . escapeshellarg('tell application "Terminal" to do script ' . json_encode($terminalCommand)) . ' >/dev/null 2>&1 &';
+            $osascript = 'osascript -e ' . escapeshellarg('tell application "Terminal" to do script ' . json_encode($terminalCommand, JSON_UNESCAPED_SLASHES)) . ' >/dev/null 2>&1';
             shell_exec($osascript);
-            usleep(2000000);
+            usleep(5000000);
         }
         $check = shell_exec('curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:' . $port . '/video_feed 2>/dev/null');
         if (trim((string) $check) === '200') {
@@ -695,9 +730,29 @@ if ($method === 'POST' && $action === 'camera-stream-stop') {
     if (stripos(PHP_OS, 'WIN') === 0) {
         shell_exec('taskkill /F /FI "WINDOWTITLE eq camera_stream*" 2>nul');
     } else {
-        shell_exec('pkill -f camera_stream.py 2>/dev/null');
+        shell_exec('pkill -f "[c]amera_stream.py" 2>/dev/null');
     }
     reply(['message' => 'Camera stream stopped.']);
+}
+
+if ($method === 'GET' && $action === 'camera-pose') {
+    $url = 'http://127.0.0.1:8090/face_pose';
+    $response = @file_get_contents($url);
+    if ($response === false) {
+        reply(['pose' => 'none', 'message' => 'Camera stream is not running.'], 502);
+    }
+    $decoded = json_decode($response, true);
+    reply(is_array($decoded) ? $decoded : ['pose' => 'none']);
+}
+
+if ($method === 'GET' && $action === 'camera-current-student') {
+    $url = 'http://127.0.0.1:8090/current_student';
+    $response = @file_get_contents($url);
+    if ($response === false) {
+        reply(['student' => null, 'message' => 'Camera stream is not running.'], 502);
+    }
+    $decoded = json_decode($response, true);
+    reply(is_array($decoded) ? $decoded : ['student' => null]);
 }
 
 if ($method === 'GET' && $action === 'camera-feed') {

@@ -159,10 +159,14 @@ if ($method === 'GET' && $action === 'device-faces') {
     $students = $db->query('SELECT student_id, full_name, face_image_path FROM students WHERE is_archived = 0 AND face_image_path IS NOT NULL AND face_image_path != "" ORDER BY student_id')->fetchAll();
     $faces = [];
     foreach ($students as $student) {
-        $imagePath = __DIR__ . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string) $student['face_image_path']);
-        if (!is_file($imagePath)) continue;
-        $mime = mime_content_type($imagePath) ?: 'image/jpeg';
-        $faces[] = ['studentId' => $student['student_id'], 'studentName' => $student['full_name'], 'image' => 'data:' . $mime . ';base64,' . base64_encode((string) file_get_contents($imagePath))];
+        foreach (explode(',', (string) $student['face_image_path']) as $relativePath) {
+            $relativePath = trim($relativePath);
+            if ($relativePath === '') continue;
+            $imagePath = __DIR__ . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relativePath);
+            if (!is_file($imagePath)) continue;
+            $mime = mime_content_type($imagePath) ?: 'image/jpeg';
+            $faces[] = ['studentId' => $student['student_id'], 'studentName' => $student['full_name'], 'image' => 'data:' . $mime . ';base64,' . base64_encode((string) file_get_contents($imagePath))];
+        }
     }
     reply(['faces' => $faces]);
 }
@@ -315,20 +319,32 @@ if ($method === 'POST' && $action === 'student') {
     }
     $imageDirectory = __DIR__ . DIRECTORY_SEPARATOR . 'face_images';
     if (!is_dir($imageDirectory) && !mkdir($imageDirectory, 0755, true)) reply(['message' => 'Unable to create the face photo folder.'], 500);
-    $relativeImagePath = null;
-    $facePhoto = (string) ($payload['facePhoto'] ?? '');
-    if ($facePhoto !== '') {
+    $relativeImagePaths = [];
+
+    $facePhotos = [];
+    if (isset($payload['facePhotos']) && is_array($payload['facePhotos'])) {
+        $facePhotos = $payload['facePhotos'];
+    } elseif (isset($payload['facePhoto']) && (string) $payload['facePhoto'] !== '') {
+        $facePhotos = [(string) $payload['facePhoto']];
+    }
+
+    $photoIndex = 0;
+    foreach ($facePhotos as $facePhoto) {
+        $facePhoto = (string) $facePhoto;
+        if ($facePhoto === '') continue;
         if (!preg_match('/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+\/=]+)$/', $facePhoto, $matches)) reply(['message' => 'Please provide a valid face photo (JPG, PNG, or WebP).'], 400);
         $imageData = base64_decode($matches[2], true);
         if ($imageData === false || strlen($imageData) > 5 * 1024 * 1024) reply(['message' => 'The face photo must be 5 MB or smaller.'], 400);
         $imageInfo = @getimagesizefromstring($imageData);
         if (!$imageInfo || !in_array($imageInfo['mime'], ['image/jpeg', 'image/png', 'image/webp'], true)) reply(['message' => 'The face photo is not a supported image.'], 400);
         $extension = $matches[1] === 'jpeg' ? 'jpg' : $matches[1];
-        $imageName = hash('sha256', $studentId) . '.' . $extension;
+        $imageName = hash('sha256', $studentId . '_' . $photoIndex) . '.' . $extension;
         $imagePath = $imageDirectory . DIRECTORY_SEPARATOR . $imageName;
         if (file_put_contents($imagePath, $imageData) === false) reply(['message' => 'Unable to save the face photo.'], 500);
-        $relativeImagePath = 'face_images/' . $imageName;
+        $relativeImagePaths[] = 'face_images/' . $imageName;
+        $photoIndex++;
     }
+    $relativeImagePath = $relativeImagePaths ? implode(',', $relativeImagePaths) : null;
 
     if ($existingId !== '') {
         $existingStudent = $db->prepare('SELECT student_id, face_image_path FROM students WHERE id = ? LIMIT 1');
@@ -386,9 +402,13 @@ if ($method === 'POST' && $action === 'delete-student') {
     $student = $statement->fetch();
     
     if ($student && $student['face_image_path']) {
-        $imagePath = __DIR__ . DIRECTORY_SEPARATOR . $student['face_image_path'];
-        if (file_exists($imagePath)) {
-            @unlink($imagePath);
+        foreach (explode(',', (string) $student['face_image_path']) as $path) {
+            $path = trim($path);
+            if ($path === '') continue;
+            $imagePath = __DIR__ . DIRECTORY_SEPARATOR . $path;
+            if (file_exists($imagePath)) {
+                @unlink($imagePath);
+            }
         }
     }
     

@@ -293,6 +293,33 @@ async function openOperationMode() {
 
     await startCameraStream(img, placeholder, feedContainer, true);
 
+    // Poll the backend for the currently detected face/student.
+    if (operationFacePollTimer) clearInterval(operationFacePollTimer);
+    operationFacePollTimer = setInterval(async function () {
+        try {
+            const data = await requestApi('camera-current-student', { method: 'GET' });
+            const info = (data && data.student) ? data.student : null;
+            const faceDetected = !!(data && data.face_detected);
+            const faceInfo = document.getElementById('faceInfo');
+            if (faceInfo) {
+                if (info && info.name) {
+                    faceInfo.textContent = 'Detected: ' + info.name + ' (' + info.student_id + ')';
+                } else if (faceDetected) {
+                    faceInfo.textContent = 'Face detected. (Recognition unavailable on this machine)';
+                } else {
+                    faceInfo.textContent = 'No face detected yet.';
+                }
+            }
+            const profileImage = document.getElementById('profileImage');
+            if (profileImage && info && info.student_id) {
+                // Try to show the student's stored face image.
+                profileImage.textContent = info.name || info.student_id;
+            }
+        } catch (error) {
+            // ignore transient errors
+        }
+    }, 1000);
+
     // Keep the stream resolution in sync with the container if its size changes
     // (e.g. when fullscreen settles or the window is resized).
     if (!cameraResizeHandler) {
@@ -333,6 +360,10 @@ async function closeOperationMode() {
     }
     const view = document.getElementById('operationModeView');
     if (view) view.hidden = true;
+    if (operationFacePollTimer) {
+        clearInterval(operationFacePollTimer);
+        operationFacePollTimer = null;
+    }
     const img = document.getElementById('cameraFeedImg');
     if (img) {
         img.src = '';
@@ -743,6 +774,7 @@ document.querySelectorAll('.nav-link').forEach(function (link) {
         document.getElementById('archiveView').hidden = target !== 'archives';
         document.getElementById('archiveDetailView').hidden = true;
         document.getElementById('setupsView').hidden = target !== 'setups';
+        document.getElementById('studentRegistrationView').hidden = target !== 'student-registration';
         document.getElementById('operationModeView').hidden = true;
         document.body.classList.remove('operation-mode-active');
         if (operationEscapeHandler) {
@@ -1230,6 +1262,8 @@ function openArchivedYear(year) {
     archivedCategory = 'students';
     document.getElementById('archiveView').hidden = true;
     document.getElementById('archiveDetailView').hidden = false;
+    const regView = document.getElementById('studentRegistrationView');
+    if (regView) regView.hidden = true;
     document.querySelectorAll('.nav-link').forEach(function (link) { link.classList.remove('active'); });
     document.querySelector('[data-view="archives"]').classList.add('active');
     document.getElementById('archiveDetailTitle').textContent = `Archived School Year ${year}`;
@@ -1609,6 +1643,148 @@ function initializeGlobalSearch() {
     });
 }
 
+let registrationCaptures = {};
+let registrationPoseTimer = null;
+let registrationCurrentPose = 'none';
+let registrationAutoCaptureEnabled = true;
+const REGISTRATION_ANGLES = ['front', 'down', 'right', 'left', 'up'];
+
+function startRegistrationCamera() {
+    const img = document.getElementById('registrationVideo');
+    if (!img) return;
+    requestApi('camera-stream-start', { method: 'POST', body: JSON.stringify({ width: 720, height: 960 }) })
+        .then(function () {
+            img.onload = function () { img.onload = null; };
+            img.src = 'api.php?action=camera-feed&ts=' + Date.now();
+            if (registrationPoseTimer) clearInterval(registrationPoseTimer);
+            registrationPoseTimer = setInterval(pollRegistrationPose, 400);
+        })
+        .catch(function (error) {
+            alert('Unable to start the camera: ' + (error.message || error));
+        });
+}
+
+function stopRegistrationCamera() {
+    const img = document.getElementById('registrationVideo');
+    if (img) img.src = '';
+    if (registrationPoseTimer) {
+        clearInterval(registrationPoseTimer);
+        registrationPoseTimer = null;
+    }
+    registrationCurrentPose = 'none';
+    const statusEl = document.getElementById('registrationPoseStatus');
+    if (statusEl) statusEl.textContent = 'Pose: none';
+}
+
+function pollRegistrationPose() {
+    requestApi('camera-pose', { method: 'GET' })
+        .then(function (data) {
+            const pose = (data && data.pose) ? data.pose : 'none';
+            registrationCurrentPose = pose;
+            const statusEl = document.getElementById('registrationPoseStatus');
+            if (statusEl) statusEl.textContent = 'Pose: ' + pose;
+            // Auto-capture when the detected pose matches the next required angle.
+            if (!registrationAutoCaptureEnabled) return;
+            const nextAngle = REGISTRATION_ANGLES.find(function (a) { return !registrationCaptures[a]; });
+            if (!nextAngle) return;
+            if (pose !== nextAngle) return;
+            // Small stability delay: capture only if pose persists.
+            if (pollRegistrationPose._stablePose === pose) {
+                if (Date.now() - (pollRegistrationPose._stableSince || 0) > 700) {
+                    captureRegistrationFrame(nextAngle);
+                    pollRegistrationPose._stablePose = null;
+                }
+            } else {
+                pollRegistrationPose._stablePose = pose;
+                pollRegistrationPose._stableSince = Date.now();
+            }
+        })
+        .catch(function () { /* ignore */ });
+}
+
+function captureRegistrationFrame(angle) {
+    const img = document.getElementById('registrationVideo');
+    const canvas = document.getElementById('registrationCanvas');
+    if (!img || !canvas) return;
+    if (!img.naturalWidth || !img.naturalHeight) {
+        // Retry shortly after the frame loads.
+        setTimeout(function () { captureRegistrationFrame(angle); }, 200);
+        return;
+    }
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    try {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    } catch (e) {
+        alert('Unable to capture frame: ' + (e.message || e));
+        return;
+    }
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    registrationCaptures[angle] = dataUrl;
+
+    const container = document.getElementById('registrationCaptures');
+    if (container) {
+        let thumb = container.querySelector('[data-angle="' + angle + '"]');
+        if (!thumb) {
+            thumb = document.createElement('div');
+            thumb.className = 'registration-capture-item';
+            thumb.dataset.angle = angle;
+            container.appendChild(thumb);
+        }
+        thumb.innerHTML = '<strong>' + angle + '</strong><img src="' + dataUrl + '" alt="' + angle + '">';
+    }
+}
+
+function captureRegistrationAngle(angle) {
+    // Manual capture fallback.
+    captureRegistrationFrame(angle);
+}
+
+async function submitStudentRegistration() {
+    const studentId = document.getElementById('regStudentId').value.trim();
+    const firstName = document.getElementById('regFirstName').value.trim();
+    const middleName = document.getElementById('regMiddleName').value.trim();
+    const lastName = document.getElementById('regLastName').value.trim();
+    const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
+    const course = document.getElementById('regCourse').value.trim();
+    const schoolYearStart = document.getElementById('regSchoolYearStart').value.trim();
+    const schoolYearEnd = document.getElementById('regSchoolYearEnd').value.trim();
+    const schoolYear = schoolYearStart + '-' + schoolYearEnd;
+    const parentPhone = document.getElementById('regParentPhone').value.trim();
+    const year = document.getElementById('regYear').value.trim();
+    const status = document.getElementById('regStatus').value.trim();
+
+    if (!studentId || !firstName || !lastName || !course || !schoolYearStart || !schoolYearEnd || !parentPhone || !year || !status) {
+        alert('Please complete all required fields.');
+        return;
+    }
+    const requiredAngles = ['front', 'down', 'right', 'left', 'up'];
+    if (!registrationCaptures.front) {
+        alert('Please capture at least the Front angle before registering.');
+        return;
+    }
+    const facePhotos = requiredAngles
+        .map(function (a) { return registrationCaptures[a]; })
+        .filter(Boolean);
+
+    const loadingEl = document.getElementById('registrationLoading');
+    if (loadingEl) loadingEl.hidden = false;
+    try {
+        const payload = { studentId, fullName, course, schoolYear, parentPhone, year, status, facePhotos: facePhotos };
+        await requestApi('student', { method: 'POST', body: JSON.stringify(payload) });
+        alert('Student registered successfully.');
+        registrationCaptures = {};
+        const container = document.getElementById('registrationCaptures');
+        if (container) container.innerHTML = '';
+        document.getElementById('studentRegistrationForm').reset();
+    } catch (error) {
+        alert(error.message || 'Registration failed.');
+    } finally {
+        if (loadingEl) loadingEl.hidden = true;
+    }
+}
+
 let detectedCameras = [];
 let selectedCameraId = null;
 let operationEscapeHandler = null;
@@ -1617,6 +1793,7 @@ let cameraResizeHandler = null;
 let cameraStreamWidth = 0;
 let cameraStreamHeight = 0;
 let cameraStreamStarting = false;
+let operationFacePollTimer = null;
 
 function showCameraInitOverlay(message) {
     const overlay = document.getElementById('cameraInitOverlay');
