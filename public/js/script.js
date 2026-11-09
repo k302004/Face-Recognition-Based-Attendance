@@ -104,6 +104,264 @@ function escapeHtml(value) {
     });
 }
 
+function showOperationExitModal() {
+    return new Promise(function (resolve) {
+        const modal = document.getElementById('operationExitModal');
+        if (!modal) {
+            resolve(false);
+            return;
+        }
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+
+        const yesButton = document.getElementById('operationExitYes');
+        const noButton = document.getElementById('operationExitNo');
+
+        function cleanup(result) {
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+            if (yesButton) yesButton.removeEventListener('click', onYes);
+            if (noButton) noButton.removeEventListener('click', onNo);
+            resolve(result);
+        }
+
+        function onYes() { cleanup(true); }
+        function onNo() { cleanup(false); }
+
+        if (yesButton) yesButton.addEventListener('click', onYes);
+        if (noButton) noButton.addEventListener('click', onNo);
+    });
+}
+
+function openCameraSelectModal(cameras) {
+    const list = document.getElementById('cameraSelectList');
+    const status = document.getElementById('cameraSelectStatus');
+    const listToShow = Array.isArray(cameras) && cameras.length ? cameras : detectedCameras;
+    if (list) {
+        list.innerHTML = listToShow.map(function (camera) {
+            const checked = selectedCameraId === camera.id ? 'checked' : '';
+            return '<label class="camera-option"><input type="radio" name="operationCameraOption" value="' + escapeHtml(camera.id) + '" ' + checked + ' onchange="selectedCameraId = this.value"> ' + escapeHtml(camera.name) + '</label>';
+        }).join('');
+    }
+    if (status) status.textContent = '';
+    const modal = document.getElementById('cameraSelectModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+    }
+}
+
+function closeCameraSelectModal() {
+    const modal = document.getElementById('cameraSelectModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+}
+
+function openCameraNoneModal() {
+    const modal = document.getElementById('cameraNoneModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+    }
+}
+
+function closeCameraNoneModal() {
+    const modal = document.getElementById('cameraNoneModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    }
+}
+
+async function saveOperationCamera() {
+    const status = document.getElementById('cameraSelectStatus');
+    const selected = detectedCameras.find(function (camera) { return camera.id === selectedCameraId; });
+    if (!selected) {
+        if (status) status.textContent = 'Select a camera first.';
+        return;
+    }
+    try {
+        await requestApi('camera-save', {
+            method: 'POST',
+            body: JSON.stringify({ id: selected.id, name: selected.name })
+        });
+        if (status) status.textContent = 'Camera saved.';
+        await loadCameraConfig();
+        closeCameraSelectModal();
+        // Retry entering operation mode now that a camera is configured.
+        openOperationMode();
+    } catch (error) {
+        if (status) status.textContent = 'Unable to save camera.';
+    }
+}
+
+async function ensureCameraConfigured() {
+    // Check if a camera is already configured.
+    try {
+        const data = await requestApi('camera-config', { method: 'GET' });
+        if (data && data.config && data.config.id) {
+            selectedCameraId = data.config.id;
+            return true;
+        }
+    } catch (error) {
+        // ignore
+    }
+    // Detect available cameras.
+    let cameras = [];
+    try {
+        const data = await requestApi('camera-list', { method: 'GET' });
+        cameras = Array.isArray(data.cameras) ? data.cameras : [];
+    } catch (error) {
+        cameras = [];
+    }
+    detectedCameras = cameras;
+    if (!cameras.length) {
+        openCameraNoneModal();
+        return false;
+    }
+    selectedCameraId = cameras[0].id;
+    openCameraSelectModal(cameras);
+    return false;
+}
+
+async function openOperationMode() {
+    const configured = await ensureCameraConfigured();
+    if (!configured) {
+        return;
+    }
+    document.querySelectorAll('.view-section').forEach(function (section) {
+        section.hidden = true;
+    });
+    const view = document.getElementById('operationModeView');
+    if (view) view.hidden = false;
+    document.querySelectorAll('.nav-link').forEach(function (item) {
+        item.classList.remove('active');
+    });
+
+    document.body.classList.add('operation-mode-active');
+
+    // Validate before stopping operation mode via Escape.
+    operationEscapeHandler = async function (event) {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        const shouldStop = await showOperationExitModal();
+        if (shouldStop) {
+            closeOperationMode();
+        } else {
+            const requestFs = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen || document.documentElement.mozRequestFullScreen || document.documentElement.msRequestFullscreen;
+            if (requestFs) {
+                try { requestFs.call(document.documentElement); } catch (error) { /* ignore */ }
+            }
+        }
+    };
+    document.addEventListener('keydown', operationEscapeHandler);
+
+    operationFullscreenHandler = async function () {
+        if (!document.body.classList.contains('operation-mode-active')) return;
+        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+        if (isFullscreen) return;
+        const shouldStop = await showOperationExitModal();
+        if (shouldStop) {
+            closeOperationMode();
+        } else {
+            const requestFs = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen || document.documentElement.mozRequestFullScreen || document.documentElement.msRequestFullscreen;
+            if (requestFs) {
+                try { requestFs.call(document.documentElement); } catch (error) { /* ignore */ }
+            }
+        }
+    };
+    document.addEventListener('fullscreenchange', operationFullscreenHandler);
+    document.addEventListener('webkitfullscreenchange', operationFullscreenHandler);
+    document.addEventListener('mozfullscreenchange', operationFullscreenHandler);
+    document.addEventListener('MSFullscreenChange', operationFullscreenHandler);
+
+    // Force the browser into fullscreen mode for operation mode.
+    const fullscreenTarget = document.documentElement;
+    const requestFs = fullscreenTarget.requestFullscreen || fullscreenTarget.webkitRequestFullscreen || fullscreenTarget.mozRequestFullScreen || fullscreenTarget.msRequestFullscreen;
+    if (requestFs) {
+        try { requestFs.call(fullscreenTarget); } catch (error) { /* ignore */ }
+    }
+
+    const img = document.getElementById('cameraFeedImg');
+    const placeholder = document.querySelector('.camera-feed__placeholder');
+    const feedContainer = document.getElementById('cameraFeed');
+
+    // Allow the browser to lay out the newly shown view before measuring.
+    await new Promise(function (resolve) { requestAnimationFrame(function () { setTimeout(resolve, 250); }); });
+
+    await startCameraStream(img, placeholder, feedContainer, true);
+
+    // Keep the stream resolution in sync with the container if its size changes
+    // (e.g. when fullscreen settles or the window is resized).
+    if (!cameraResizeHandler) {
+        let resizeTimer = null;
+        cameraResizeHandler = function () {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function () {
+                const container = document.getElementById('cameraFeed');
+                const image = document.getElementById('cameraFeedImg');
+                const place = document.querySelector('.camera-feed__placeholder');
+                startCameraStream(image, place, container, false);
+            }, 300);
+        };
+        window.addEventListener('resize', cameraResizeHandler);
+        document.addEventListener('fullscreenchange', cameraResizeHandler);
+        document.addEventListener('webkitfullscreenchange', cameraResizeHandler);
+        document.addEventListener('mozfullscreenchange', cameraResizeHandler);
+        document.addEventListener('MSFullscreenChange', cameraResizeHandler);
+    }
+}
+
+async function closeOperationMode() {
+    document.body.classList.remove('operation-mode-active');
+    if (operationEscapeHandler) {
+        document.removeEventListener('keydown', operationEscapeHandler);
+        operationEscapeHandler = null;
+    }
+    if (operationFullscreenHandler) {
+        document.removeEventListener('fullscreenchange', operationFullscreenHandler);
+        document.removeEventListener('webkitfullscreenchange', operationFullscreenHandler);
+        document.removeEventListener('mozfullscreenchange', operationFullscreenHandler);
+        document.removeEventListener('MSFullscreenChange', operationFullscreenHandler);
+        operationFullscreenHandler = null;
+    }
+    const exitFs = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+    if (exitFs && (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement)) {
+        try { exitFs.call(document); } catch (error) { /* ignore */ }
+    }
+    const view = document.getElementById('operationModeView');
+    if (view) view.hidden = true;
+    const img = document.getElementById('cameraFeedImg');
+    if (img) {
+        img.src = '';
+        img.style.display = 'none';
+    }
+    const placeholder = document.querySelector('.camera-feed__placeholder');
+    if (placeholder) placeholder.style.display = 'flex';
+    if (cameraResizeHandler) {
+        window.removeEventListener('resize', cameraResizeHandler);
+        document.removeEventListener('fullscreenchange', cameraResizeHandler);
+        document.removeEventListener('webkitfullscreenchange', cameraResizeHandler);
+        document.removeEventListener('mozfullscreenchange', cameraResizeHandler);
+        document.removeEventListener('MSFullscreenChange', cameraResizeHandler);
+        cameraResizeHandler = null;
+    }
+    cameraStreamWidth = 0;
+    cameraStreamHeight = 0;
+    hideCameraInitOverlay();
+    try {
+        await requestApi('camera-stream-stop', { method: 'POST' });
+    } catch (error) {
+        // ignore
+    }
+    const home = document.getElementById('homeView');
+    if (home) home.hidden = false;
+    const homeLink = document.querySelector('[data-view="home"]');
+    if (homeLink) homeLink.classList.add('active');
+}
+
 function statusClass(value) {
     const status = String(value).toLowerCase();
     if (status.includes('absent') || status.includes('risk') || status.includes('danger')) return 'danger';
@@ -484,6 +742,26 @@ document.querySelectorAll('.nav-link').forEach(function (link) {
         document.getElementById('historyView').hidden = target !== 'history';
         document.getElementById('archiveView').hidden = target !== 'archives';
         document.getElementById('archiveDetailView').hidden = true;
+        document.getElementById('setupsView').hidden = target !== 'setups';
+        document.getElementById('operationModeView').hidden = true;
+        document.body.classList.remove('operation-mode-active');
+        if (operationEscapeHandler) {
+            document.removeEventListener('keydown', operationEscapeHandler);
+            operationEscapeHandler = null;
+        }
+        if (operationFullscreenHandler) {
+            document.removeEventListener('fullscreenchange', operationFullscreenHandler);
+            document.removeEventListener('webkitfullscreenchange', operationFullscreenHandler);
+            document.removeEventListener('mozfullscreenchange', operationFullscreenHandler);
+            document.removeEventListener('MSFullscreenChange', operationFullscreenHandler);
+            operationFullscreenHandler = null;
+        }
+        const _exitFs = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+        if (_exitFs && (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement)) {
+            try { _exitFs.call(document); } catch (error) { /* ignore */ }
+        }
+        const _opImg = document.getElementById('cameraFeedImg');
+        if (_opImg) { _opImg.src = ''; _opImg.style.display = 'none'; }
     });
 });
 
@@ -1331,6 +1609,145 @@ function initializeGlobalSearch() {
     });
 }
 
+let detectedCameras = [];
+let selectedCameraId = null;
+let operationEscapeHandler = null;
+let operationFullscreenHandler = null;
+let cameraResizeHandler = null;
+let cameraStreamWidth = 0;
+let cameraStreamHeight = 0;
+let cameraStreamStarting = false;
+
+function showCameraInitOverlay(message) {
+    const overlay = document.getElementById('cameraInitOverlay');
+    const text = document.getElementById('cameraInitOverlayText');
+    if (text && message) text.textContent = message;
+    if (overlay) overlay.hidden = false;
+}
+
+function hideCameraInitOverlay() {
+    const overlay = document.getElementById('cameraInitOverlay');
+    if (overlay) overlay.hidden = true;
+}
+
+async function startCameraStream(img, placeholder, feedContainer, force) {
+    if (cameraStreamStarting) return;
+    const container = feedContainer || document.getElementById('cameraFeed');
+    const image = img || document.getElementById('cameraFeedImg');
+    const place = placeholder || document.querySelector('.camera-feed__placeholder');
+
+    let targetWidth = cameraStreamWidth || 720;
+    let targetHeight = cameraStreamHeight || 1280;
+    if (container) {
+        const rect = container.getBoundingClientRect();
+        const width = Math.round(container.clientWidth || rect.width || 0);
+        const height = Math.round(container.clientHeight || rect.height || 0);
+        if (width > 0 && height > 0) {
+            targetWidth = width;
+            targetHeight = height;
+        }
+    }
+
+    // Avoid restarting the stream for sub-pixel / tiny changes.
+    if (!force && cameraStreamWidth > 0 && cameraStreamHeight > 0 &&
+        Math.abs(targetWidth - cameraStreamWidth) < 4 && Math.abs(targetHeight - cameraStreamHeight) < 4) {
+        return;
+    }
+
+    cameraStreamStarting = true;
+    showCameraInitOverlay('Initializing camera feed (' + targetWidth + '×' + targetHeight + ')…');
+    try {
+        await requestApi('camera-stream-start', {
+            method: 'POST',
+            body: JSON.stringify({ width: targetWidth, height: targetHeight })
+        });
+        cameraStreamWidth = targetWidth;
+        cameraStreamHeight = targetHeight;
+        if (image) {
+            image.style.display = 'block';
+            image.src = 'api.php?action=camera-feed&ts=' + Date.now();
+        }
+        if (place) place.style.display = 'none';
+        showCameraInitOverlay('Camera ready. Loading stream…');
+        await new Promise(function (resolve) { setTimeout(resolve, 400); });
+    } catch (error) {
+        if (place) {
+            place.style.display = 'flex';
+            place.textContent = 'Unable to start camera stream. Run scripts/camera_stream.py manually.';
+        }
+        showCameraInitOverlay('Camera initialization failed.');
+        await new Promise(function (resolve) { setTimeout(resolve, 1200); });
+    } finally {
+        cameraStreamStarting = false;
+        hideCameraInitOverlay();
+    }
+}
+
+async function detectCameras() {
+    const status = document.getElementById('cameraStatus');
+    const list = document.getElementById('cameraList');
+    if (status) status.textContent = 'Detecting cameras...';
+    if (list) list.innerHTML = '';
+    try {
+        const data = await requestApi('camera-list', { method: 'GET' });
+        detectedCameras = Array.isArray(data.cameras) ? data.cameras : [];
+        if (!detectedCameras.length) {
+            if (status) status.textContent = 'No cameras detected.';
+            return;
+        }
+        if (status) status.textContent = detectedCameras.length + ' camera(s) found.';
+        if (list) {
+            list.innerHTML = detectedCameras.map(function (camera) {
+                const checked = selectedCameraId === camera.id ? 'checked' : '';
+                return '<label class="camera-option"><input type="radio" name="cameraOption" value="' + escapeHtml(camera.id) + '" ' + checked + ' onchange="selectedCameraId = this.value"> ' + escapeHtml(camera.name) + '</label>';
+            }).join('');
+        }
+    } catch (error) {
+        if (status) status.textContent = 'Camera detection failed.';
+        if (list) list.innerHTML = '<p class="empty-state">' + escapeHtml(error.message || 'Unable to detect cameras.') + '</p>';
+    }
+}
+
+async function saveSelectedCamera() {
+    const status = document.getElementById('cameraStatus');
+    const selected = detectedCameras.find(function (camera) { return camera.id === selectedCameraId; });
+    if (!selected) {
+        if (status) status.textContent = 'Select a camera first.';
+        return;
+    }
+    try {
+        const data = await requestApi('camera-save', {
+            method: 'POST',
+            body: JSON.stringify({
+                id: selected.id,
+                name: selected.name,
+                modelId: selected.modelId || null,
+                uniqueId: selected.uniqueId || null
+            })
+        });
+        if (status) status.textContent = 'Camera saved.';
+        await loadCameraConfig();
+    } catch (error) {
+        if (status) status.textContent = 'Unable to save camera.';
+    }
+}
+
+async function loadCameraConfig() {
+    const summary = document.getElementById('cameraConfigSummary');
+    try {
+        const data = await requestApi('camera-config', { method: 'GET' });
+        if (data.config) {
+            if (summary) summary.textContent = 'Saved camera: ' + (data.config.name || data.config.id || 'Unknown');
+            selectedCameraId = data.config.id || selectedCameraId;
+        } else {
+            if (summary) summary.textContent = 'No camera saved yet.';
+        }
+    } catch (error) {
+        if (summary) summary.textContent = 'Unable to load camera config.';
+    }
+}
+
+loadCameraConfig();
 renderAuditLog();
 initializeGlobalSearch();
 updateOverviewStats();

@@ -96,6 +96,7 @@
                             <li><a href="#" class="nav-link" data-view="overview">Overview</a></li>
                             <li><a href="#" class="nav-link" data-view="history">History</a></li>
                             <li><a href="#" class="nav-link" data-view="archives">Archives</a></li>
+                            <li><a href="#" class="nav-link" data-view="setups">Setups</a></li>
                         </ul>
                     </nav>
 
@@ -129,6 +130,10 @@
                         <h1 id="dashboard-title">Welcome, Administrator!</h1>
                         <p>Manage student attendance, schedules, and reports from this dashboard.</p>
                     </section>
+
+                    <div class="operation-start-wrap">
+                        <button class="start-operation-btn" type="button" onclick="openOperationMode()">Start Operation Mode</button>
+                    </div>
 
                     <div class="view-toolbar" aria-label="Student list tools">
                         <div class="toolbar-search">
@@ -586,6 +591,65 @@
                         </table>
                     </section>
                 </section>
+
+                <div class="modal" id="operationExitModal" aria-hidden="true">
+                    <div class="modal-content confirm-modal-content">
+                        <h2>Stop Operation Mode?</h2>
+                        <p class="profile-note">Are you sure you want to exit operation mode?</p>
+                        <div class="setup-actions" style="justify-content:center;">
+                            <button class="save-btn" type="button" id="operationExitYes">Yes, stop</button>
+                            <button class="close-btn" type="button" id="operationExitNo">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <section id="operationModeView" class="view-section" hidden>
+                    <div class="title">
+                        <div>
+                            <h1>Operation Mode</h1>
+                            <p>Live camera feed and student profile preview.</p>
+                        </div>
+                        <button class="back-link" type="button" onclick="closeOperationMode()">← Back</button>
+                    </div>
+                    <div class="operation-grid">
+                        <div class="operation-panel">
+                            <h2>Camera Feed</h2>
+                            <div class="camera-feed" id="cameraFeed">
+                                <img id="cameraFeedImg" src="" alt="Camera feed" style="display:none;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <span class="camera-feed__placeholder">Camera feed will appear here. Start the Python stream first.</span>
+                            </div>
+                        </div>
+                        <div class="operation-panel">
+                            <h2>Student Profile Image</h2>
+                            <div class="profile-image" id="profileImage">No student selected.</div>
+                        </div>
+                        <div class="operation-panel operation-panel--info">
+                            <h2>Face Information</h2>
+                            <div class="face-info" id="faceInfo">No face detected yet.</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="setupsView" class="view-section" hidden>
+                    <div class="title">
+                        <h1>Setups</h1>
+                        <p>Configure system settings for this computer.</p>
+                    </div>
+
+                    <section class="setup-card" aria-labelledby="cameraSetupTitle">
+                        <h2 id="cameraSetupTitle">Camera Setup</h2>
+                        <p class="setup-note">Detect cameras connected to this computer and choose the one to use.</p>
+                        <div class="setup-actions">
+                            <button class="tool-btn" type="button" onclick="detectCameras()">Detect Cameras</button>
+                            <span id="cameraStatus" class="setup-status" aria-live="polite"></span>
+                        </div>
+                        <div id="cameraList" class="camera-list"></div>
+                        <div class="setup-save-row">
+                            <button class="save-btn" type="button" onclick="saveSelectedCamera()">Save Camera</button>
+                        </div>
+                        <div id="cameraConfigSummary" class="setup-summary"></div>
+                    </section>
+                </section>
             </main>
         </div>
 
@@ -788,5 +852,29 @@
                 </div>
             </div>
         </div>
+    <div class="modal" id="cameraSelectModal" aria-hidden="true">
+        <div class="modal-content confirm-modal-content">
+            <h2>Select a Camera</h2>
+            <p class="profile-note">No camera is set up yet. Choose a default camera to use for the operation mode.</p>
+            <div id="cameraSelectList" class="camera-list"></div>
+            <span id="cameraSelectStatus" class="setup-status" aria-live="polite"></span>
+            <div class="setup-save-row">
+                <button class="save-btn" type="button" onclick="saveOperationCamera()">Save Camera</button>
+                <button class="close-btn" type="button" onclick="closeCameraSelectModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal" id="cameraNoneModal" aria-hidden="true">
+        <div class="modal-content confirm-modal-content">
+            <h2>No Camera Found</h2>
+            <p class="profile-note">No cameras were detected on this computer. Connect a camera and try again.</p>
+            <div class="setup-save-row">
+                <button class="close-btn" type="button" onclick="closeCameraNoneModal()">OK</button>
+            </div>
+        </div>
+    </div>
+    <div class="camera-init-overlay" id="cameraInitOverlay" hidden>
+        <div class="camera-init-overlay__strip" id="cameraInitOverlayText">Initializing camera feed…</div>
+    </div>
     </body>
 </html>

@@ -557,4 +557,148 @@ if ($method === 'POST' && $action === 'settings') {
     reply(['message' => 'Settings saved.']);
 }
 
+if ($method === 'GET' && $action === 'camera-list') {
+    $script = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'scripts' . DIRECTORY_SEPARATOR . 'list_cameras.py';
+    $python = 'python3';
+    $command = $python . ' ' . escapeshellarg($script) . ' 2>&1';
+    $output = shell_exec($command);
+    $decoded = json_decode((string) $output, true);
+    if (!is_array($decoded) || !isset($decoded['cameras']) || !is_array($decoded['cameras'])) {
+        reply(['message' => 'Unable to detect cameras.', 'details' => trim((string) $output)], 500);
+    }
+    reply(['cameras' => $decoded['cameras']]);
+}
+
+if ($method === 'GET' && $action === 'camera-config') {
+    $path = __DIR__ . DIRECTORY_SEPARATOR . 'camera.config';
+    if (!is_file($path)) reply(['config' => null]);
+    $content = file_get_contents($path);
+    $decoded = json_decode((string) $content, true);
+    reply(['config' => is_array($decoded) ? $decoded : null]);
+}
+
+if ($method === 'POST' && $action === 'camera-save') {
+    $cameraId = trim((string) ($payload['id'] ?? ''));
+    $cameraName = trim((string) ($payload['name'] ?? ''));
+    if ($cameraId === '' || $cameraName === '') reply(['message' => 'Camera id and name are required.'], 400);
+    $config = [
+        'id' => $cameraId,
+        'name' => $cameraName,
+        'modelId' => $payload['modelId'] ?? null,
+        'uniqueId' => $payload['uniqueId'] ?? null,
+        'savedAt' => date('c'),
+    ];
+    $path = __DIR__ . DIRECTORY_SEPARATOR . 'camera.config';
+    if (file_put_contents($path, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) === false) {
+        reply(['message' => 'Unable to save camera config.'], 500);
+    }
+    reply(['message' => 'Camera saved.', 'config' => $config]);
+}
+
+if ($method === 'POST' && $action === 'camera-stream-start') {
+    $pidFile = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'framework' . DIRECTORY_SEPARATOR . 'camera_stream.pid';
+    $logFile = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'logs' . DIRECTORY_SEPARATOR . 'camera_stream.log';
+    $script = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'scripts' . DIRECTORY_SEPARATOR . 'camera_stream.py';
+
+    if (is_file($pidFile)) {
+        $existingPid = (int) trim((string) file_get_contents($pidFile));
+        if ($existingPid > 0) {
+            shell_exec('kill ' . $existingPid . ' 2>/dev/null');
+        }
+        @unlink($pidFile);
+    }
+    // Also stop any stray stream processes so the new dimensions take effect.
+    shell_exec('pkill -f camera_stream.py 2>/dev/null');
+    usleep(300000);
+
+    $cameraIndex = 0;
+    $configPath = __DIR__ . DIRECTORY_SEPARATOR . 'camera.config';
+    if (is_file($configPath)) {
+        $config = json_decode((string) file_get_contents($configPath), true);
+        if (is_array($config) && isset($config['id']) && ctype_digit((string) $config['id'])) {
+            $cameraIndex = (int) $config['id'];
+        }
+    }
+
+    $port = 8090;
+    $targetWidth = isset($payload['width']) ? (int) $payload['width'] : 720;
+    $targetHeight = isset($payload['height']) ? (int) $payload['height'] : 1280;
+    if ($targetWidth < 100) $targetWidth = 720;
+    if ($targetHeight < 100) $targetHeight = 1280;
+
+    $command = 'nohup python3 ' . escapeshellarg($script) . ' ' . escapeshellarg((string) $cameraIndex) . ' ' . escapeshellarg((string) $port)
+        . ' ' . escapeshellarg((string) $targetWidth) . ' ' . escapeshellarg((string) $targetHeight)
+        . ' > ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
+    $pidOutput = shell_exec($command);
+    $pid = (int) trim((string) $pidOutput);
+    if ($pid > 0) {
+        file_put_contents($pidFile, (string) $pid);
+    }
+
+    // Give the stream a moment to start.
+    usleep(1500000);
+    $alive = false;
+    if ($pid > 0) {
+        $check = shell_exec('kill -0 ' . $pid . ' 2>/dev/null && echo running');
+        $alive = trim((string) $check) === 'running';
+    }
+    if (!$alive) {
+        // macOS may block camera access for the web server process. Fall back to
+        // launching the script in Terminal, which usually already has permission.
+        $terminalCommand = 'cd ' . escapeshellarg(dirname(__DIR__)) . ' && python3 ' . escapeshellarg($script) . ' ' . escapeshellarg((string) $cameraIndex) . ' ' . escapeshellarg((string) $port) . ' ' . escapeshellarg((string) $targetWidth) . ' ' . escapeshellarg((string) $targetHeight);
+        $osascript = 'osascript -e ' . escapeshellarg('tell application "Terminal" to do script ' . json_encode($terminalCommand)) . ' >/dev/null 2>&1 &';
+        shell_exec($osascript);
+        usleep(2000000);
+        $check = shell_exec('curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:' . $port . '/video_feed 2>/dev/null');
+        if (trim((string) $check) === '200') {
+            reply(['message' => 'Camera stream started in Terminal.', 'url' => 'http://127.0.0.1:' . $port . '/video_feed']);
+        }
+
+        $logTail = is_file($logFile) ? trim((string) file_get_contents($logFile)) : '';
+        if (strlen($logTail) > 500) $logTail = substr($logTail, -500);
+        @unlink($pidFile);
+        reply(['message' => 'Camera stream failed to start.', 'details' => $logTail], 500);
+    }
+    reply(['message' => 'Camera stream started.', 'pid' => $pid, 'url' => 'http://127.0.0.1:' . $port . '/video_feed']);
+}
+
+if ($method === 'POST' && $action === 'camera-stream-stop') {
+    $pidFile = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'framework' . DIRECTORY_SEPARATOR . 'camera_stream.pid';
+    if (is_file($pidFile)) {
+        $pid = (int) trim((string) file_get_contents($pidFile));
+        if ($pid > 0) {
+            shell_exec('kill ' . $pid . ' 2>/dev/null');
+        }
+        @unlink($pidFile);
+    }
+    // Stop any stray stream processes as well.
+    shell_exec('pkill -f camera_stream.py 2>/dev/null');
+    reply(['message' => 'Camera stream stopped.']);
+}
+
+if ($method === 'GET' && $action === 'camera-feed') {
+    $url = 'http://127.0.0.1:8090/video_feed';
+    $stream = @fopen($url, 'r');
+    if (!$stream) {
+        http_response_code(502);
+        echo json_encode(['message' => 'Camera stream is not running.']);
+        exit;
+    }
+    foreach ($http_response_header as $header) {
+        if (stripos($header, 'Content-Type:') === 0) {
+            header($header);
+        }
+    }
+    header('Cache-Control: no-cache, private');
+    header('Pragma: no-cache');
+    header('X-Accel-Buffering: no');
+    while (ob_get_level() > 0) {
+        ob_end_flush();
+    }
+    set_time_limit(0);
+    fpassthru($stream);
+    fclose($stream);
+    exit;
+}
+
 reply(['message' => 'Unknown action.'], 404);
