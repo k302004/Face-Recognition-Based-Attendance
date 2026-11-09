@@ -559,7 +559,7 @@ if ($method === 'POST' && $action === 'settings') {
 
 if ($method === 'GET' && $action === 'camera-list') {
     $script = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'scripts' . DIRECTORY_SEPARATOR . 'list_cameras.py';
-    $python = 'python3';
+    $python = (stripos(PHP_OS, 'WIN') === 0 && trim((string) shell_exec('where python3 2>nul')) === '') ? 'python' : 'python3';
     $command = $python . ' ' . escapeshellarg($script) . ' 2>&1';
     $output = shell_exec($command);
     $decoded = json_decode((string) $output, true);
@@ -626,11 +626,18 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
     if ($targetWidth < 100) $targetWidth = 720;
     if ($targetHeight < 100) $targetHeight = 1280;
 
-    $command = 'nohup python3 ' . escapeshellarg($script) . ' ' . escapeshellarg((string) $cameraIndex) . ' ' . escapeshellarg((string) $port)
-        . ' ' . escapeshellarg((string) $targetWidth) . ' ' . escapeshellarg((string) $targetHeight)
-        . ' > ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
-    $pidOutput = shell_exec($command);
-    $pid = (int) trim((string) $pidOutput);
+    $python = (stripos(PHP_OS, 'WIN') === 0 && trim((string) shell_exec('where python3 2>nul')) === '') ? 'python' : 'python3';
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        $psCommand = 'powershell -NoProfile -Command "$p = Start-Process -FilePath ' . escapeshellarg($python) . ' -ArgumentList ' . escapeshellarg($script . ' ' . $cameraIndex . ' ' . $port . ' ' . $targetWidth . ' ' . $targetHeight) . ' -RedirectStandardOutput ' . escapeshellarg($logFile) . ' -RedirectStandardError ' . escapeshellarg($logFile) . ' -PassThru; Write-Output $p.Id"';
+        $pidOutput = shell_exec($psCommand);
+        $pid = (int) trim((string) $pidOutput);
+    } else {
+        $command = 'nohup ' . $python . ' ' . escapeshellarg($script) . ' ' . escapeshellarg((string) $cameraIndex) . ' ' . escapeshellarg((string) $port)
+            . ' ' . escapeshellarg((string) $targetWidth) . ' ' . escapeshellarg((string) $targetHeight)
+            . ' > ' . escapeshellarg($logFile) . ' 2>&1 & echo $!';
+        $pidOutput = shell_exec($command);
+        $pid = (int) trim((string) $pidOutput);
+    }
     if ($pid > 0) {
         file_put_contents($pidFile, (string) $pid);
     }
@@ -639,19 +646,29 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
     usleep(1500000);
     $alive = false;
     if ($pid > 0) {
-        $check = shell_exec('kill -0 ' . $pid . ' 2>/dev/null && echo running');
-        $alive = trim((string) $check) === 'running';
+        if (stripos(PHP_OS, 'WIN') === 0) {
+            $check = shell_exec('tasklist /FI "PID eq ' . $pid . '" 2>nul | findstr ' . $pid);
+            $alive = trim((string) $check) !== '';
+        } else {
+            $check = shell_exec('kill -0 ' . $pid . ' 2>/dev/null && echo running');
+            $alive = trim((string) $check) === 'running';
+        }
     }
     if (!$alive) {
-        // macOS may block camera access for the web server process. Fall back to
-        // launching the script in Terminal, which usually already has permission.
-        $terminalCommand = 'cd ' . escapeshellarg(dirname(__DIR__)) . ' && python3 ' . escapeshellarg($script) . ' ' . escapeshellarg((string) $cameraIndex) . ' ' . escapeshellarg((string) $port) . ' ' . escapeshellarg((string) $targetWidth) . ' ' . escapeshellarg((string) $targetHeight);
-        $osascript = 'osascript -e ' . escapeshellarg('tell application "Terminal" to do script ' . json_encode($terminalCommand)) . ' >/dev/null 2>&1 &';
-        shell_exec($osascript);
-        usleep(2000000);
+        if (stripos(PHP_OS, 'WIN') === 0) {
+            // On Windows, give the already-launched process more time, then check.
+            usleep(2000000);
+        } else {
+            // macOS may block camera access for the web server process. Fall back to
+            // launching the script in Terminal, which usually already has permission.
+            $terminalCommand = 'cd ' . escapeshellarg(dirname(__DIR__)) . ' && ' . $python . ' ' . escapeshellarg($script) . ' ' . escapeshellarg((string) $cameraIndex) . ' ' . escapeshellarg((string) $port) . ' ' . escapeshellarg((string) $targetWidth) . ' ' . escapeshellarg((string) $targetHeight);
+            $osascript = 'osascript -e ' . escapeshellarg('tell application "Terminal" to do script ' . json_encode($terminalCommand)) . ' >/dev/null 2>&1 &';
+            shell_exec($osascript);
+            usleep(2000000);
+        }
         $check = shell_exec('curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:' . $port . '/video_feed 2>/dev/null');
         if (trim((string) $check) === '200') {
-            reply(['message' => 'Camera stream started in Terminal.', 'url' => 'http://127.0.0.1:' . $port . '/video_feed']);
+            reply(['message' => 'Camera stream started.', 'url' => 'http://127.0.0.1:' . $port . '/video_feed']);
         }
 
         $logTail = is_file($logFile) ? trim((string) file_get_contents($logFile)) : '';
@@ -667,12 +684,19 @@ if ($method === 'POST' && $action === 'camera-stream-stop') {
     if (is_file($pidFile)) {
         $pid = (int) trim((string) file_get_contents($pidFile));
         if ($pid > 0) {
-            shell_exec('kill ' . $pid . ' 2>/dev/null');
+            if (stripos(PHP_OS, 'WIN') === 0) {
+                shell_exec('taskkill /PID ' . $pid . ' /F 2>nul');
+            } else {
+                shell_exec('kill ' . $pid . ' 2>/dev/null');
+            }
         }
         @unlink($pidFile);
     }
-    // Stop any stray stream processes as well.
-    shell_exec('pkill -f camera_stream.py 2>/dev/null');
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        shell_exec('taskkill /F /FI "WINDOWTITLE eq camera_stream*" 2>nul');
+    } else {
+        shell_exec('pkill -f camera_stream.py 2>/dev/null');
+    }
     reply(['message' => 'Camera stream stopped.']);
 }
 

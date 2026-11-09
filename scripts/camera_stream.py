@@ -81,15 +81,43 @@ def load_camera_index_from_config():
 
 
 def open_camera(index):
-    capture = cv2.VideoCapture(index)
-    if not capture.isOpened():
-        # Try a few more indices in case the requested one is unavailable.
-        for candidate in range(0, 5):
-            capture = cv2.VideoCapture(candidate)
-            if capture.isOpened():
-                return capture, candidate
-        return None, None
-    return capture, index
+    import platform
+
+    backends = []
+    if platform.system().lower() == "windows" and hasattr(cv2, "CAP_DSHOW"):
+        backends.append(cv2.CAP_DSHOW)
+    backends.append(None)  # default
+
+    # Normalize index to an int when possible.
+    try:
+        idx = int(index)
+    except (TypeError, ValueError):
+        idx = 0
+
+    for backend in backends:
+        if backend is None:
+            capture = cv2.VideoCapture(idx)
+        else:
+            capture = cv2.VideoCapture(idx, backend)
+        if capture is not None and capture.isOpened():
+            ok, _ = capture.read()
+            if ok:
+                return capture, idx
+            capture.release()
+
+    # Try a few more indices in case the requested one is unavailable.
+    for candidate in range(0, 5):
+        for backend in backends:
+            if backend is None:
+                capture = cv2.VideoCapture(candidate)
+            else:
+                capture = cv2.VideoCapture(candidate, backend)
+            if capture is not None and capture.isOpened():
+                ok, _ = capture.read()
+                if ok:
+                    return capture, candidate
+                capture.release()
+    return None, None
 
 
 class StreamHandler(BaseHTTPRequestHandler):

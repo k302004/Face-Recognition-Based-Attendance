@@ -92,14 +92,80 @@ def detect_linux():
     return cameras
 
 
+def detect_windows():
+    cameras = []
+    # Prefer DirectShow backend on Windows for reliable device enumeration.
+    try:
+        import cv2  # type: ignore
+
+        backends = []
+        if hasattr(cv2, "CAP_DSHOW"):
+            backends.append(cv2.CAP_DSHOW)
+        backends.append(0)  # default
+
+        seen = set()
+        for backend in backends:
+            for index in range(10):
+                try:
+                    if backend == 0:
+                        capture = cv2.VideoCapture(index)
+                    else:
+                        capture = cv2.VideoCapture(index, backend)
+                except Exception:
+                    continue
+                if capture is not None and capture.isOpened():
+                    # Try to read a frame to confirm the device is usable.
+                    ok, _ = capture.read()
+                    if ok and str(index) not in seen:
+                        seen.add(str(index))
+                        cameras.append({
+                            "id": str(index),
+                            "name": f"Camera {index}",
+                            "modelId": None,
+                            "uniqueId": None,
+                        })
+                    capture.release()
+            if cameras:
+                return cameras
+    except Exception:
+        pass
+
+    # Fall back to PowerShell device enumeration (best effort, names only).
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-PnpDevice -Class Camera -Status OK | Select-Object -ExpandProperty FriendlyName"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                name = line.strip()
+                if name:
+                    cameras.append({
+                        "id": name,
+                        "name": name,
+                        "modelId": None,
+                        "uniqueId": None,
+                    })
+    except Exception:
+        pass
+
+    return cameras
+
+
 def main():
     system = platform.system().lower()
     if system == "darwin":
         cameras = detect_macos()
     elif system == "linux":
         cameras = detect_linux()
+    elif system == "windows":
+        cameras = detect_windows()
     else:
-        cameras = []
+        # Generic fallback: probe indices with OpenCV.
+        cameras = detect_linux()
 
     print(json.dumps({"cameras": cameras}, ensure_ascii=False))
 
