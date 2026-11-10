@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """Simple MJPEG camera stream server for the DRLCEFI attendance app.
 
 Run:
@@ -20,7 +20,11 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import cv2
+try:
+    import cv2
+except ImportError:
+    print('OpenCV (cv2) is not installed. Install with: pip install opencv-python', file=sys.stderr)
+    raise SystemExit(1)
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8090

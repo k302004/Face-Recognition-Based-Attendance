@@ -2,3 +2,5 @@ opencv-python
 face-recognition
 requests
 pyserial
+RPLCD
+numpy

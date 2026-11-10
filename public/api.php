@@ -575,7 +575,15 @@ if ($method === 'POST' && $action === 'settings') {
 
 if ($method === 'GET' && $action === 'camera-list') {
     $script = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'scripts' . DIRECTORY_SEPARATOR . 'list_cameras.py';
-    $python = (stripos(PHP_OS, 'WIN') === 0 && trim((string) shell_exec('where python3 2>nul')) === '') ? 'python' : 'python3';
+    $python = 'python3';
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        $python = trim((string) shell_exec('where python3 2>nul')) !== '' ? 'python3' : 'python';
+    } else {
+        foreach (['/usr/bin/python3', 'python3', 'python'] as $candidate) {
+            $probe = shell_exec(escapeshellarg($candidate) . ' -c "import cv2" 2>/dev/null && echo OK');
+            if (trim((string) $probe) === 'OK') { $python = $candidate; break; }
+        }
+    }
     $command = $python . ' ' . escapeshellarg($script) . ' 2>&1';
     $output = shell_exec($command);
     $decoded = json_decode((string) $output, true);
@@ -650,7 +658,15 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
     if ($targetWidth < 100) $targetWidth = 720;
     if ($targetHeight < 100) $targetHeight = 1280;
 
-    $python = (stripos(PHP_OS, 'WIN') === 0 && trim((string) shell_exec('where python3 2>nul')) === '') ? 'python' : 'python3';
+    $python = 'python3';
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        $python = trim((string) shell_exec('where python3 2>nul')) !== '' ? 'python3' : 'python';
+    } else {
+        foreach (['/usr/bin/python3', 'python3', 'python'] as $candidate) {
+            $probe = shell_exec(escapeshellarg($candidate) . ' -c "import cv2" 2>/dev/null && echo OK');
+            if (trim((string) $probe) === 'OK') { $python = $candidate; break; }
+        }
+    }
     if (stripos(PHP_OS, 'WIN') === 0) {
         $psCommand = 'powershell -NoProfile -Command "$p = Start-Process -FilePath ' . escapeshellarg($python) . ' -ArgumentList ' . escapeshellarg($script . ' ' . $cameraIndex . ' ' . $port . ' ' . $targetWidth . ' ' . $targetHeight) . ' -RedirectStandardOutput ' . escapeshellarg($logFile) . ' -RedirectStandardError ' . escapeshellarg($logFile) . ' -PassThru; Write-Output $p.Id"';
         $pidOutput = shell_exec($psCommand);

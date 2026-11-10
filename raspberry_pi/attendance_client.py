@@ -1,12 +1,25 @@
 import json
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-import cv2
-import face_recognition
-import requests
+try:
+    import cv2
+except ImportError:
+    print('OpenCV (cv2) is not installed. Install with: pip install opencv-python', file=sys.stderr)
+    raise SystemExit(1)
+try:
+    import face_recognition
+except ImportError:
+    print('face_recognition is not installed. Install with: pip install face-recognition', file=sys.stderr)
+    raise SystemExit(1)
+try:
+    import requests
+except ImportError:
+    print('requests is not installed. Install with: pip install requests', file=sys.stderr)
+    raise SystemExit(1)
 try:
     from RPLCD.i2c import CharLCD
 except ImportError:
@@ -17,7 +30,11 @@ ROOT = Path(__file__).resolve().parent
 
 
 def load_config():
-    with (ROOT / "config.json").open(encoding="utf-8") as config_file:
+    config_path = ROOT / "config.json"
+    if not config_path.is_file():
+        print("Missing config.json. Copy config.example.json to config.json and edit it.", file=sys.stderr)
+        raise SystemExit(1)
+    with config_path.open(encoding="utf-8") as config_file:
         return json.load(config_file)
 
 
