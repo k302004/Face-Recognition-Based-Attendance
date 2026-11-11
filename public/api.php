@@ -35,6 +35,50 @@ function data(): array { $value = json_decode(file_get_contents('php://input'), 
 function reply(array $value, int $status = 200): never { http_response_code($status); echo json_encode($value); exit; }
 function user(): array { return $_SESSION['user'] ?? []; }
 function requireLogin(): void { if (!user()) reply(['message' => 'Login required.'], 401); }
+function cameraPythonCandidates(): array {
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        $candidates = [];
+        $localAppData = getenv('LOCALAPPDATA');
+        if (!is_string($localAppData) || $localAppData === '') {
+            $userProfile = getenv('USERPROFILE');
+            if (is_string($userProfile) && $userProfile !== '') {
+                $localAppData = $userProfile . DIRECTORY_SEPARATOR . 'AppData' . DIRECTORY_SEPARATOR . 'Local';
+            }
+        }
+        if (is_string($localAppData) && $localAppData !== '') {
+            foreach ([
+                $localAppData . DIRECTORY_SEPARATOR . 'Microsoft' . DIRECTORY_SEPARATOR . 'WindowsApps' . DIRECTORY_SEPARATOR . 'PythonSoftwareFoundation.Python.*' . DIRECTORY_SEPARATOR . 'python.exe',
+                $localAppData . DIRECTORY_SEPARATOR . 'Programs' . DIRECTORY_SEPARATOR . 'Python' . DIRECTORY_SEPARATOR . 'Python*' . DIRECTORY_SEPARATOR . 'python.exe',
+            ] as $pattern) {
+                foreach (glob($pattern) ?: [] as $candidate) {
+                    $candidates[] = $candidate;
+                }
+            }
+        }
+        $candidates[] = 'python3';
+        $candidates[] = 'python';
+        $candidates = array_values(array_unique($candidates));
+
+        $opencvCandidates = [];
+        foreach ($candidates as $candidate) {
+            $probe = shell_exec(escapeshellarg($candidate) . ' -c "import cv2" 2>nul && echo OK');
+            if (trim((string) $probe) === 'OK') {
+                $opencvCandidates[] = $candidate;
+            }
+        }
+
+        return $opencvCandidates ?: $candidates;
+    }
+
+    foreach (['/usr/bin/python3', 'python3', 'python'] as $candidate) {
+        $probe = shell_exec(escapeshellarg($candidate) . ' -c "import cv2" 2>/dev/null && echo OK');
+        if (trim((string) $probe) === 'OK') {
+            return [$candidate];
+        }
+    }
+
+    return ['python3'];
+}
 function deviceToken(): string {
     $configuredToken = getenv('ATTENDANCE_DEVICE_TOKEN');
     if ($configuredToken !== false && trim($configuredToken) !== '') return trim($configuredToken);
@@ -575,22 +619,16 @@ if ($method === 'POST' && $action === 'settings') {
 
 if ($method === 'GET' && $action === 'camera-list') {
     $script = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'scripts' . DIRECTORY_SEPARATOR . 'list_cameras.py';
-    $python = 'python3';
-    if (stripos(PHP_OS, 'WIN') === 0) {
-        $python = trim((string) shell_exec('where python3 2>nul')) !== '' ? 'python3' : 'python';
-    } else {
-        foreach (['/usr/bin/python3', 'python3', 'python'] as $candidate) {
-            $probe = shell_exec(escapeshellarg($candidate) . ' -c "import cv2" 2>/dev/null && echo OK');
-            if (trim((string) $probe) === 'OK') { $python = $candidate; break; }
+    $output = '';
+    foreach (cameraPythonCandidates() as $python) {
+        $command = escapeshellarg($python) . ' ' . escapeshellarg($script);
+        $output = shell_exec($command);
+        $decoded = json_decode((string) $output, true);
+        if (is_array($decoded) && isset($decoded['cameras']) && is_array($decoded['cameras'])) {
+            reply(['cameras' => $decoded['cameras']]);
         }
     }
-    $command = $python . ' ' . escapeshellarg($script) . ' 2>&1';
-    $output = shell_exec($command);
-    $decoded = json_decode((string) $output, true);
-    if (!is_array($decoded) || !isset($decoded['cameras']) || !is_array($decoded['cameras'])) {
-        reply(['message' => 'Unable to detect cameras.', 'details' => trim((string) $output)], 500);
-    }
-    reply(['cameras' => $decoded['cameras']]);
+    reply(['message' => 'Unable to detect cameras.', 'details' => trim((string) $output)], 500);
 }
 
 if ($method === 'GET' && $action === 'camera-config') {
@@ -622,13 +660,15 @@ if ($method === 'POST' && $action === 'camera-save') {
 if ($method === 'POST' && $action === 'camera-stream-start') {
     $pidFile = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'framework' . DIRECTORY_SEPARATOR . 'camera_stream.pid';
     $logFile = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'logs' . DIRECTORY_SEPARATOR . 'camera_stream.log';
+    $errorLogFile = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'logs' . DIRECTORY_SEPARATOR . 'camera_stream_error.log';
+    $launchErrorLogFile = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'logs' . DIRECTORY_SEPARATOR . 'camera_stream_launch_error.log';
     $script = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'scripts' . DIRECTORY_SEPARATOR . 'camera_stream.py';
 
     if (is_file($pidFile)) {
         $existingPid = (int) trim((string) file_get_contents($pidFile));
         if ($existingPid > 0) {
             if (stripos(PHP_OS, 'WIN') === 0) {
-                shell_exec('taskkill /PID ' . $existingPid . ' /F 2>nul');
+                shell_exec('taskkill /PID ' . $existingPid . ' /T /F 2>nul');
             } else {
                 shell_exec('kill ' . $existingPid . ' 2>/dev/null');
             }
@@ -658,19 +698,30 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
     if ($targetWidth < 100) $targetWidth = 720;
     if ($targetHeight < 100) $targetHeight = 1280;
 
-    $python = 'python3';
+    $pidOutput = '';
+    $pythonCandidates = cameraPythonCandidates();
+    $python = $pythonCandidates[0] ?? 'python3';
     if (stripos(PHP_OS, 'WIN') === 0) {
-        $python = trim((string) shell_exec('where python3 2>nul')) !== '' ? 'python3' : 'python';
-    } else {
-        foreach (['/usr/bin/python3', 'python3', 'python'] as $candidate) {
-            $probe = shell_exec(escapeshellarg($candidate) . ' -c "import cv2" 2>/dev/null && echo OK');
-            if (trim((string) $probe) === 'OK') { $python = $candidate; break; }
+        file_put_contents($logFile, '');
+        file_put_contents($errorLogFile, '');
+        file_put_contents($launchErrorLogFile, '');
+        $quotePowerShell = static function (string $value): string {
+            return "'" . str_replace("'", "''", $value) . "'";
+        };
+        $commandLine = 'cmd.exe /c ""' . $python . '" -u "' . $script . '" '
+            . $cameraIndex . ' ' . $port . ' ' . $targetWidth . ' ' . $targetHeight
+            . ' > "' . $logFile . '" 2> "' . $errorLogFile . '""';
+        $powershellScript = '$ErrorActionPreference = "Stop"; try { $startup = ([wmiclass]"Win32_ProcessStartup").CreateInstance(); $startup.ShowWindow = 0; $result = ([wmiclass]"Win32_Process").Create('
+            . $quotePowerShell($commandLine) . ', ' . $quotePowerShell(dirname(__DIR__)) . ', $startup); if ($result.ReturnValue -ne 0) { throw ("Unable to launch camera process: " + $result.ReturnValue) }; [System.IO.File]::WriteAllText('
+            . $quotePowerShell($pidFile) . ', [string] $result.ProcessId) } catch { [System.IO.File]::WriteAllText('
+            . $quotePowerShell($launchErrorLogFile) . ', $_.ToString()); exit 1 }';
+        $encodedScript = iconv('UTF-8', 'UTF-16LE', $powershellScript);
+        if ($encodedScript === false) {
+            reply(['message' => 'Unable to prepare the camera startup command.'], 500);
         }
-    }
-    if (stripos(PHP_OS, 'WIN') === 0) {
-        $psCommand = 'powershell -NoProfile -Command "$p = Start-Process -FilePath ' . escapeshellarg($python) . ' -ArgumentList ' . escapeshellarg($script . ' ' . $cameraIndex . ' ' . $port . ' ' . $targetWidth . ' ' . $targetHeight) . ' -RedirectStandardOutput ' . escapeshellarg($logFile) . ' -RedirectStandardError ' . escapeshellarg($logFile) . ' -PassThru; Write-Output $p.Id"';
-        $pidOutput = shell_exec($psCommand);
-        $pid = (int) trim((string) $pidOutput);
+        $psCommand = 'powershell.exe -NoProfile -NonInteractive -EncodedCommand ' . base64_encode($encodedScript) . ' >NUL 2>&1';
+        shell_exec($psCommand);
+        $pid = is_file($pidFile) ? (int) trim((string) file_get_contents($pidFile)) : 0;
     } else {
         $command = 'nohup ' . $python . ' ' . escapeshellarg($script) . ' ' . escapeshellarg((string) $cameraIndex) . ' ' . escapeshellarg((string) $port)
             . ' ' . escapeshellarg((string) $targetWidth) . ' ' . escapeshellarg((string) $targetHeight)
@@ -696,9 +747,13 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
     }
     // Even if the process is alive, verify it actually serves frames.
     // Background processes on macOS often lack camera permission and silently fail.
+    $isWindows = stripos(PHP_OS, 'WIN') === 0;
+    $nullDevice = $isWindows ? 'NUL' : '/dev/null';
+    $stderrRedirect = $isWindows ? '2>nul' : '2>/dev/null';
+    $healthUrl = 'http://127.0.0.1:' . $port . '/face_pose';
     if ($alive) {
-        $feedCheck = trim((string) shell_exec('curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:' . $port . '/video_feed 2>/dev/null'));
-        if ($feedCheck !== '200') {
+        $healthCheck = trim((string) shell_exec('curl -s -o ' . escapeshellarg($nullDevice) . ' -w "%{http_code}" --max-time 2 ' . $healthUrl . ' ' . $stderrRedirect));
+        if ($healthCheck !== '200') {
             $alive = false;
         }
     }
@@ -717,14 +772,27 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
             shell_exec($osascript);
             usleep(5000000);
         }
-        $check = shell_exec('curl -s -o /dev/null -w "%{http_code}" --max-time 2 http://127.0.0.1:' . $port . '/video_feed 2>/dev/null');
-        if (trim((string) $check) === '200') {
+        $healthCheck = shell_exec('curl -s -o ' . escapeshellarg($nullDevice) . ' -w "%{http_code}" --max-time 2 ' . $healthUrl . ' ' . $stderrRedirect);
+        if (trim((string) $healthCheck) === '200') {
             reply(['message' => 'Camera stream started.', 'url' => 'http://127.0.0.1:' . $port . '/video_feed']);
         }
 
-        $logTail = is_file($logFile) ? trim((string) file_get_contents($logFile)) : '';
+        $logTail = '';
+        foreach ([$logFile, $errorLogFile, $launchErrorLogFile] as $cameraLogFile) {
+            if (is_file($cameraLogFile)) {
+                $cameraLog = trim((string) file_get_contents($cameraLogFile));
+                if ($cameraLog !== '') {
+                    $logTail .= ($logTail === '' ? '' : PHP_EOL) . $cameraLog;
+                }
+            }
+        }
+        if ($logTail === '') {
+            $logTail = trim((string) $pidOutput);
+        }
         if (strlen($logTail) > 500) $logTail = substr($logTail, -500);
-        @unlink($pidFile);
+        if (is_file($pidFile)) {
+            unlink($pidFile);
+        }
         reply(['message' => 'Camera stream failed to start.', 'details' => $logTail], 500);
     }
     reply(['message' => 'Camera stream started.', 'pid' => $pid, 'url' => 'http://127.0.0.1:' . $port . '/video_feed']);
@@ -736,7 +804,7 @@ if ($method === 'POST' && $action === 'camera-stream-stop') {
         $pid = (int) trim((string) file_get_contents($pidFile));
         if ($pid > 0) {
             if (stripos(PHP_OS, 'WIN') === 0) {
-                shell_exec('taskkill /PID ' . $pid . ' /F 2>nul');
+                shell_exec('taskkill /PID ' . $pid . ' /T /F 2>nul');
             } else {
                 shell_exec('kill ' . $pid . ' 2>/dev/null');
             }

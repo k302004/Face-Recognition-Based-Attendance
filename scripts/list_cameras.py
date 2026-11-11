@@ -4,6 +4,7 @@ import os
 import platform
 import subprocess
 import sys
+import time
 
 
 def detect_macos():
@@ -94,46 +95,58 @@ def detect_linux():
 
 def detect_windows():
     cameras = []
-    # Prefer DirectShow backend on Windows for reliable device enumeration.
+    # Windows camera drivers vary, so try both supported capture backends.
     try:
         import cv2  # type: ignore
 
         backends = []
         if hasattr(cv2, "CAP_DSHOW"):
             backends.append(cv2.CAP_DSHOW)
-        backends.append(0)  # default
+        if hasattr(cv2, "CAP_MSMF"):
+            backends.append(cv2.CAP_MSMF)
+        backends.append(None)  # OpenCV default backend
 
-        seen = set()
-        for backend in backends:
-            for index in range(10):
+        for index in range(10):
+            for backend in backends:
+                capture = None
+                camera_found = False
                 try:
-                    if backend == 0:
+                    if backend is None:
                         capture = cv2.VideoCapture(index)
                     else:
                         capture = cv2.VideoCapture(index, backend)
+                    if capture is not None and capture.isOpened():
+                        # Some Windows drivers need a moment before the first frame is ready.
+                        for attempt in range(5):
+                            ok, frame = capture.read()
+                            if ok and frame is not None:
+                                camera_found = True
+                                break
+                            if attempt < 4:
+                                time.sleep(0.1)
                 except Exception:
-                    continue
-                if capture is not None and capture.isOpened():
-                    # Try to read a frame to confirm the device is usable.
-                    ok, _ = capture.read()
-                    if ok and str(index) not in seen:
-                        seen.add(str(index))
-                        cameras.append({
-                            "id": str(index),
-                            "name": f"Camera {index}",
-                            "modelId": None,
-                            "uniqueId": None,
-                        })
-                    capture.release()
-            if cameras:
-                return cameras
+                    pass
+                finally:
+                    if capture is not None:
+                        capture.release()
+                if camera_found:
+                    cameras.append({
+                        "id": str(index),
+                        "name": f"Camera {index}",
+                        "modelId": None,
+                        "uniqueId": None,
+                    })
+                    break
+
+        if cameras:
+            return cameras
     except Exception:
         pass
 
     # Fall back to PowerShell device enumeration (best effort, names only).
     try:
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
+            ["powershell.exe", "-NoProfile", "-Command",
              "Get-PnpDevice -Class Camera -Status OK | Select-Object -ExpandProperty FriendlyName"],
             capture_output=True,
             text=True,

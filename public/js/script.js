@@ -96,6 +96,7 @@ async function showApp(user) {
     document.getElementById('appShell').dataset.role = role;
     applyRolePermissions(role);
     await loadDashboardData();
+    await loadCameraConfig();
 }
 
 function escapeHtml(value) {
@@ -536,6 +537,7 @@ async function requestApi(action, options) {
     if (!response.ok) {
         const error = new Error(data.message || 'Request failed.');
         error.retryAfter = data.retryAfter;
+        error.details = data.details;
         throw error;
     }
     return data;
@@ -1660,7 +1662,8 @@ function startRegistrationCamera() {
             registrationPoseTimer = setInterval(pollRegistrationPose, 400);
         })
         .catch(function (error) {
-            alert('Unable to start the camera: ' + (error.message || error));
+            const details = error.details ? ' ' + error.details : '';
+            alert('Unable to start the camera: ' + (error.message || error) + details);
         });
 }
 
@@ -1924,7 +1927,6 @@ async function loadCameraConfig() {
     }
 }
 
-loadCameraConfig();
 renderAuditLog();
 initializeGlobalSearch();
 updateOverviewStats();

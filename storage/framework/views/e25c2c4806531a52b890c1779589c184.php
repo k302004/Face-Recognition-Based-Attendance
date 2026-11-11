@@ -7,13 +7,17 @@
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,600;6..96,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="<?php echo e(asset('css/style.css')); ?>">
+        <link rel="stylesheet" href="<?php echo e(asset('css/style.css')); ?>?v=<?php echo e(filemtime(public_path('css/style.css'))); ?>">
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-        <script src="<?php echo e(asset('js/script.js')); ?>" defer></script>
+        <script src="<?php echo e(asset('js/script.js')); ?>?v=<?php echo e(filemtime(public_path('js/script.js'))); ?>" defer></script>
     </head>
 
     <body>
         <main class="auth-screen" id="authScreen">
+            <button class="theme-toggle auth-theme-toggle" id="authThemeToggle" type="button" aria-label="Switch to dark mode">Dark mode</button>
+            <div class="auth-illustration" aria-hidden="true">
+                <img src="<?php echo e(asset('images/student%20.jpg')); ?>" alt="">
+            </div>
             <section class="auth-card" aria-labelledby="authTitle">
                 <div class="auth-brand">DRLCEFI</div>
                 <h1 id="authTitle">Welcome back</h1>
@@ -26,7 +30,7 @@
 
                 <form class="auth-form" id="loginForm">
                     <label for="loginEmail">Email address</label>
-                    <input type="email" id="loginEmail" autocomplete="email" placeholder="you@example.com" required>
+                    <input type="email" id="loginEmail" autocomplete="email" placeholder="drlcefattendance@gmail.com" required>
                     <label for="loginPassword">Password</label>
                     <input type="password" id="loginPassword" autocomplete="current-password" placeholder="Enter your password" required>
                     <label class="remember-option" for="rememberPassword">
@@ -45,7 +49,7 @@
                         </div>
                     </div>
                     <label for="resetEmail">Email address</label>
-                    <input type="email" id="resetEmail" autocomplete="email" placeholder="you@example.com" required>
+                    <input type="email" id="resetEmail" autocomplete="email" placeholder="drlcefattendance@gmail.com" required>
                     <div id="resetVerificationFields" hidden>
                         <label for="resetCode">Verification code</label>
                         <input type="text" id="resetCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="Enter 6-digit code" maxlength="6">
@@ -64,7 +68,7 @@
                         <input type="text" id="signupFullName" autocomplete="name" placeholder="Full name" required>
                     </div>
                     <label for="signupEmail">Email address</label>
-                    <input type="email" id="signupEmail" autocomplete="email" placeholder="you@example.com" required>
+                    <input type="email" id="signupEmail" autocomplete="email" placeholder="drlcefattendance@gmail.com" required>
                     <label for="signupPassword">Password</label>
                     <input type="password" id="signupPassword" autocomplete="new-password" placeholder="At least 6 characters" minlength="6" required>
                     <button class="auth-submit" type="submit">Create account</button>
@@ -79,7 +83,7 @@
         <div class="page-shell" id="appShell" hidden>
             <header class="site-header">
                 <div class="site-header__inner">
-                    <a class="logo" href="index.html" aria-label="DRLCEFI home">
+                    <a class="logo nav-link active" href="#" data-view="home" aria-label="DRLCEFI home">
                         <span>DRLCEFI</span>
                     </a>
 
@@ -92,9 +96,12 @@
                             <li><a href="#" class="nav-link" data-view="overview">Overview</a></li>
                             <li><a href="#" class="nav-link" data-view="history">History</a></li>
                             <li><a href="#" class="nav-link" data-view="archives">Archives</a></li>
+                            <li><a href="#" class="nav-link" data-view="setups">Setups</a></li>
+                            <li><a href="#" class="nav-link" data-view="student-registration">Student Registration</a></li>
                         </ul>
                     </nav>
 
+                    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode">Dark mode</button>
                     <div class="admin">
                         <button class="admin-btn" type="button" aria-expanded="false" aria-controls="menu" onclick="toggleMenu()">
                             <span class="admin-icon" aria-hidden="true">👤</span>
@@ -124,6 +131,10 @@
                         <h1 id="dashboard-title">Welcome, Administrator!</h1>
                         <p>Manage student attendance, schedules, and reports from this dashboard.</p>
                     </section>
+
+                    <div class="operation-start-wrap">
+                        <button class="start-operation-btn" type="button" onclick="openOperationMode()">Start Operation Mode</button>
+                    </div>
 
                     <div class="view-toolbar" aria-label="Student list tools">
                         <div class="toolbar-search">
@@ -581,7 +592,157 @@
                         </table>
                     </section>
                 </section>
-            </main>
+
+                <div class="modal" id="operationExitModal" aria-hidden="true">
+                    <div class="modal-content confirm-modal-content">
+                        <h2>Stop Operation Mode?</h2>
+                        <p class="profile-note">Are you sure you want to exit operation mode?</p>
+                        <div class="setup-actions" style="justify-content:center;">
+                            <button class="save-btn" type="button" id="operationExitYes">Yes, stop</button>
+                            <button class="close-btn" type="button" id="operationExitNo">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <section id="operationModeView" class="view-section" hidden>
+                    <div class="title">
+                        <div>
+                            <h1>Operation Mode</h1>
+                            <p>Live camera feed and student profile preview.</p>
+                        </div>
+                        <button class="back-link" type="button" onclick="closeOperationMode()">← Back</button>
+                    </div>
+                    <div class="operation-grid">
+                        <div class="operation-panel">
+                            <h2>Camera Feed</h2>
+                            <div class="camera-feed" id="cameraFeed">
+                                <img id="cameraFeedImg" src="" alt="Camera feed" style="display:none;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <span class="camera-feed__placeholder">Camera feed will appear here. Start the Python stream first.</span>
+                            </div>
+                        </div>
+                        <div class="operation-panel">
+                            <h2>Student Profile Image</h2>
+                            <div class="profile-image" id="profileImage">No student selected.</div>
+                        </div>
+                        <div class="operation-panel operation-panel--info">
+                            <h2>Face Information</h2>
+                            <div class="face-info" id="faceInfo">No face detected yet.</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="setupsView" class="view-section" hidden>
+                    <div class="title">
+                        <h1>Setups</h1>
+                        <p>Configure system settings for this computer.</p>
+                    </div>
+
+                    <section class="setup-card" aria-labelledby="cameraSetupTitle">
+                        <h2 id="cameraSetupTitle">Camera Setup</h2>
+                        <p class="setup-note">Detect cameras connected to this computer and choose the one to use.</p>
+                        <div class="setup-actions">
+                            <button class="tool-btn" type="button" onclick="detectCameras()">Detect Cameras</button>
+                            <span id="cameraStatus" class="setup-status" aria-live="polite"></span>
+                        </div>
+                        <div id="cameraList" class="camera-list"></div>
+                        <div class="setup-save-row">
+                            <button class="save-btn" type="button" onclick="saveSelectedCamera()">Save Camera</button>
+                        </div>
+                        <div id="cameraConfigSummary" class="setup-summary"></div>
+                    </section>
+                </section>
+
+                 <section id="studentRegistrationView" class="view-section" hidden>
+                     <div class="title">
+                         <h1>Student Registration</h1>
+                         <p>Register a student and capture face images from multiple angles.</p>
+                     </div>
+                     <div class="registration-layout">
+                         <form id="studentRegistrationForm" class="registration-form" onsubmit="return false;">
+                             <div class="form-row">
+                                 <div class="form-group">
+                                     <label for="regStudentId">Student ID</label>
+                                     <input type="text" id="regStudentId" placeholder="Student ID" required>
+                                 </div>
+                                 <div class="form-group">
+                                     <label for="regFirstName">First name</label>
+                                     <input type="text" id="regFirstName" placeholder="First name" required>
+                                 </div>
+                             </div>
+                             <div class="form-row">
+                                 <div class="form-group">
+                                     <label for="regMiddleName">Middle name</label>
+                                     <input type="text" id="regMiddleName" placeholder="Middle name">
+                                 </div>
+                                 <div class="form-group">
+                                     <label for="regLastName">Last name</label>
+                                     <input type="text" id="regLastName" placeholder="Last name" required>
+                                 </div>
+                             </div>
+                             <div class="form-row">
+                                 <div class="form-group">
+                                     <label for="regCourse">Course</label>
+                                     <input type="text" id="regCourse" placeholder="Course" required>
+                                 </div>
+                                 <div class="form-group">
+                                     <label for="regYear">Year</label>
+                                     <select id="regYear" required>
+                                         <option value="">Select year</option>
+                                         <option value="1st Year">1st Year</option>
+                                         <option value="2nd Year">2nd Year</option>
+                                         <option value="3rd Year">3rd Year</option>
+                                         <option value="4th Year">4th Year</option>
+                                     </select>
+                                 </div>
+                             </div>
+                             <div class="school-year-fields student-school-year-fields">
+                                 <label for="regSchoolYearStart">Start year
+                                     <input type="number" id="regSchoolYearStart" placeholder="2026" min="2000" max="2100" required>
+                                 </label>
+                                 <span class="school-year-separator" aria-hidden="true">-</span>
+                                 <label for="regSchoolYearEnd">End year
+                                     <input type="number" id="regSchoolYearEnd" placeholder="2027" min="2000" max="2100" required>
+                                 </label>
+                             </div>
+                             <div class="form-group">
+                                 <label for="regParentPhone">Parent's phone number</label>
+                                 <input type="tel" id="regParentPhone" placeholder="+63 912 345 6789" required>
+                             </div>
+                             <div class="form-group">
+                                 <label for="regStatus">Status</label>
+                                 <select id="regStatus" required>
+                                     <option value="">Select status</option>
+                                     <option value="Regular">Regular</option>
+                                     <option value="Irregular">Irregular</option>
+                                 </select>
+                             </div>
+                         </form>
+
+                         <div class="registration-capture">
+                             <div class="camera-preview">
+                                 <img id="registrationVideo" alt="camera preview">
+                                 <canvas id="registrationCanvas" hidden></canvas>
+                                 <div class="face-oval-guide" aria-hidden="true"></div>
+                             </div>
+                             <div class="capture-actions">
+                                 <span id="registrationPoseStatus" class="setup-status">Pose: none</span>
+                                 <button class="tool-btn" type="button" onclick="startRegistrationCamera()">Start Camera</button>
+                                 <button class="tool-btn" type="button" onclick="stopRegistrationCamera()">Stop Camera</button>
+                                 <button class="tool-btn" type="button" onclick="captureRegistrationAngle('front')">Capture Front</button>
+                                 <button class="tool-btn" type="button" onclick="captureRegistrationAngle('down')">Look Down</button>
+                                 <button class="tool-btn" type="button" onclick="captureRegistrationAngle('right')">Look Right</button>
+                                 <button class="tool-btn" type="button" onclick="captureRegistrationAngle('left')">Look Left</button>
+                                 <button class="tool-btn" type="button" onclick="captureRegistrationAngle('up')">Look Up</button>
+                             </div>
+                             <div id="registrationLoading" class="registration-loading" hidden>
+                                 <span class="spinner"></span> Registering student...
+                             </div>
+                             <div id="registrationCaptures" class="registration-captures"></div>
+                             <button class="save-btn" type="button" onclick="submitStudentRegistration()">Register Student</button>
+                         </div>
+                     </div>
+                 </section>
+             </main>
         </div>
 
         <div class="modal" id="archiveSchoolYearModal" aria-hidden="true">
@@ -783,5 +944,29 @@
                 </div>
             </div>
         </div>
+    <div class="modal" id="cameraSelectModal" aria-hidden="true">
+        <div class="modal-content confirm-modal-content">
+            <h2>Select a Camera</h2>
+            <p class="profile-note">No camera is set up yet. Choose a default camera to use for the operation mode.</p>
+            <div id="cameraSelectList" class="camera-list"></div>
+            <span id="cameraSelectStatus" class="setup-status" aria-live="polite"></span>
+            <div class="setup-save-row">
+                <button class="save-btn" type="button" onclick="saveOperationCamera()">Save Camera</button>
+                <button class="close-btn" type="button" onclick="closeCameraSelectModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal" id="cameraNoneModal" aria-hidden="true">
+        <div class="modal-content confirm-modal-content">
+            <h2>No Camera Found</h2>
+            <p class="profile-note">No cameras were detected on this computer. Connect a camera and try again.</p>
+            <div class="setup-save-row">
+                <button class="close-btn" type="button" onclick="closeCameraNoneModal()">OK</button>
+            </div>
+        </div>
+    </div>
+    <div class="camera-init-overlay" id="cameraInitOverlay" hidden>
+        <div class="camera-init-overlay__strip" id="cameraInitOverlayText">Initializing camera feed…</div>
+    </div>
     </body>
 </html><?php /**PATH C:\Users\ACER\OneDrive\Desktop\FACERECOGNITION\Face-Recognition-Based-Attendance\resources\views/attendance-app.blade.php ENDPATH**/ ?>
