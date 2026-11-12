@@ -344,16 +344,23 @@ if ($method === 'POST' && $action === 'record-attendance') {
         reply(['message' => 'Student was not found or is archived.'], 404);
     }
     $attendanceDate = date('F j, Y');
-    $duplicateStatement = $db->prepare('SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject = ? LIMIT 1');
-    $duplicateStatement->execute([$studentId, $attendanceDate, $subject]);
-    $existingAttendance = $duplicateStatement->fetch();
+    $openAttendanceStatement = $db->prepare("SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject = ? AND time_in <> '--' AND time_in <> '' AND (time_out = '--' OR time_out = '') ORDER BY id DESC LIMIT 1");
+    $openAttendanceStatement->execute([$studentId, $attendanceDate, $subject]);
+    $openAttendance = $openAttendanceStatement->fetch();
     if ($attendanceAction === 'time_out') {
-        if (! $existingAttendance) {
-            reply(['message' => 'No time in record found for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'no_time_in']);
+        if (! $openAttendance) {
+            $attendanceExistsStatement = $db->prepare('SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject = ? LIMIT 1');
+            $attendanceExistsStatement->execute([$studentId, $attendanceDate, $subject]);
+            $attendanceExists = $attendanceExistsStatement->fetch();
+            if (! $attendanceExists) {
+                reply(['message' => 'No time in record found for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'no_time_in']);
+            }
+
+            reply(['message' => 'Time out already recorded for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
         }
         $timeOut = date('g:i A');
         $update = $db->prepare("UPDATE attendance SET time_out = ? WHERE id = ? AND (time_out = '--' OR time_out = '')");
-        $update->execute([$timeOut, $existingAttendance['id']]);
+        $update->execute([$timeOut, $openAttendance['id']]);
         if ($update->rowCount() === 0) {
             reply(['message' => 'Time out already recorded for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
         }
@@ -361,7 +368,7 @@ if ($method === 'POST' && $action === 'record-attendance') {
         reply(['message' => 'Time out recorded.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'parentPhone' => $student['parent_phone'], 'date' => $attendanceDate, 'timeOut' => $timeOut, 'subject' => $subject, 'status' => $status, 'action' => 'time_out']);
     }
     // time_in mode
-    if ($existingAttendance) {
+    if ($openAttendance) {
         reply(['message' => 'Time in already recorded for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
     }
     $statement = $db->prepare('INSERT INTO attendance (student_id, student_name, course, attendance_date, subject, time_in, time_out, status, school_year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
@@ -395,13 +402,13 @@ if ($method === 'POST' && $action === 'device-attendance') {
     }
 
     $attendanceDate = date('F j, Y');
-    $duplicateStatement = $db->prepare('SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject = ? LIMIT 1');
-    $duplicateStatement->execute([$studentId, $attendanceDate, $subject]);
-    $existingAttendance = $duplicateStatement->fetch();
-    if ($existingAttendance) {
+    $openAttendanceStatement = $db->prepare("SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject = ? AND time_in <> '--' AND time_in <> '' AND (time_out = '--' OR time_out = '') ORDER BY id DESC LIMIT 1");
+    $openAttendanceStatement->execute([$studentId, $attendanceDate, $subject]);
+    $openAttendance = $openAttendanceStatement->fetch();
+    if ($openAttendance) {
         $timeOut = date('g:i A');
         $update = $db->prepare("UPDATE attendance SET time_out = ? WHERE id = ? AND (time_out = '--' OR time_out = '')");
-        $update->execute([$timeOut, $existingAttendance['id']]);
+        $update->execute([$timeOut, $openAttendance['id']]);
         if ($update->rowCount() === 0) {
             reply(['message' => 'Time out already recorded for this student and subject today.'], 409);
         }
@@ -881,6 +888,7 @@ if ($method === 'POST' && $action === 'camera-save') {
 }
 
 if ($method === 'POST' && $action === 'camera-stream-start') {
+    $port = 8090;
     $pidFile = dirname(__DIR__).DIRECTORY_SEPARATOR.'storage'.DIRECTORY_SEPARATOR.'framework'.DIRECTORY_SEPARATOR.'camera_stream.pid';
     $logFile = dirname(__DIR__).DIRECTORY_SEPARATOR.'storage'.DIRECTORY_SEPARATOR.'logs'.DIRECTORY_SEPARATOR.'camera_stream.log';
     $errorLogFile = dirname(__DIR__).DIRECTORY_SEPARATOR.'storage'.DIRECTORY_SEPARATOR.'logs'.DIRECTORY_SEPARATOR.'camera_stream_error.log';
@@ -925,7 +933,6 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
         }
     }
 
-    $port = 8090;
     $targetWidth = isset($payload['width']) ? (int) $payload['width'] : 720;
     $targetHeight = isset($payload['height']) ? (int) $payload['height'] : 1280;
     if ($targetWidth < 100) {
@@ -1081,7 +1088,9 @@ if ($method === 'GET' && $action === 'camera-feed') {
         echo json_encode(['message' => 'Camera stream is not running.']);
         exit;
     }
-    foreach ($http_response_header as $header) {
+    $streamMetadata = stream_get_meta_data($stream);
+    $responseHeaders = $streamMetadata['wrapper_data'] ?? [];
+    foreach ($responseHeaders as $header) {
         if (stripos($header, 'Content-Type:') === 0) {
             header($header);
         }

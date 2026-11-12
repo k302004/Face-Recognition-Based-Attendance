@@ -2007,7 +2007,7 @@ async function startCameraStream(img, placeholder, feedContainer, force) {
             var _retryCount = 0;
             var _loadFeed = function () {
                 image.src = window.location.protocol === 'https:'
-                    ? '/camera-feed#' + Date.now()
+                    ? 'api.php?action=camera-feed&_=' + Date.now()
                     : 'http://127.0.0.1:8090/video_feed#' + Date.now();
             };
             image.onerror = function () {
