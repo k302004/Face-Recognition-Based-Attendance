@@ -705,6 +705,10 @@
                                  </label>
                              </div>
                              <div class="form-group">
+                                 <label for="regAge">Age</label>
+                                 <input type="number" id="regAge" placeholder="Age" min="1" max="120">
+                             </div>
+                             <div class="form-group">
                                  <label for="regParentPhone">Parent's phone number</label>
                                  <input type="tel" id="regParentPhone" placeholder="+63 912 345 6789" required>
                              </div>
@@ -854,6 +858,10 @@
                     <input type="text" id="studentLastName" placeholder="Last name">
                 </div>
                 <input type="text" id="course" placeholder="Course">
+                <div class="form-group">
+                    <label for="age">Age</label>
+                    <input type="number" id="age" placeholder="Age" min="1" max="120">
+                </div>
                 <div class="school-year-fields student-school-year-fields">
                     <label for="studentSchoolYearStart">Start year
                         <input type="number" id="studentSchoolYearStart" placeholder="2026" min="2000" max="2100" required>

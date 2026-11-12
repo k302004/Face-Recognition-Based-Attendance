@@ -3590,6 +3590,37 @@ tr:hover {
     overflow-y: auto;
 }
 
+.student-details {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.student-detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+.student-detail-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6b7280;
+}
+
+.student-detail-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+    word-break: break-word;
+}
+
 .operation-panel {
     background: #1f2937;
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -3629,6 +3660,20 @@ tr:hover {
     height: 100%;
     object-fit: cover;
     border-radius: 8px;
+}
+
+.profile-image__name {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #f9fafb;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
 }
 
 .camera-feed__placeholder {

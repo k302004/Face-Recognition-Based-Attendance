@@ -1,5 +1,11 @@
-php_version: "8.3"
+php_version: "8.4"
 node_version: "24"
 framework: laravel
 framework_version: "13"
 secured: true
+services:
+  - soketi:
+      preset: soketi
+workers:
+  - queue
+  - reverb

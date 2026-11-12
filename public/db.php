@@ -1,7 +1,8 @@
 <?php
+
 declare(strict_types=1);
 
-$databasePath = __DIR__ . DIRECTORY_SEPARATOR . 'attendance.sqlite';
+$databasePath = __DIR__.DIRECTORY_SEPARATOR.'attendance.sqlite';
 $options = [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -9,7 +10,7 @@ $options = [
 ];
 
 try {
-    $db = new PDO('sqlite:' . $databasePath, null, null, $options);
+    $db = new PDO('sqlite:'.$databasePath, null, null, $options);
     $db->exec('PRAGMA foreign_keys = ON');
     $db->exec('CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,6 +32,7 @@ try {
         full_name TEXT NOT NULL,
         course TEXT NOT NULL,
         year TEXT NOT NULL,
+        age INTEGER,
         school_year TEXT NOT NULL DEFAULT \'2026-2027\',
         status TEXT NOT NULL,
         parent_phone TEXT NOT NULL DEFAULT \'\',
@@ -44,6 +46,11 @@ try {
     }
     try {
         $db->exec('ALTER TABLE students ADD COLUMN face_image_path TEXT');
+    } catch (PDOException $error) {
+        // The column already exists on an initialized database.
+    }
+    try {
+        $db->exec('ALTER TABLE students ADD COLUMN age INTEGER');
     } catch (PDOException $error) {
         // The column already exists on an initialized database.
     }
@@ -74,7 +81,7 @@ try {
     foreach ([
         "ALTER TABLE schedules ADD COLUMN school_year TEXT NOT NULL DEFAULT '2026-2027'",
         'ALTER TABLE schedules ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0',
-        'ALTER TABLE schedules ADD COLUMN archived_school_year TEXT'
+        'ALTER TABLE schedules ADD COLUMN archived_school_year TEXT',
     ] as $alterSchedule) {
         try {
             $db->exec($alterSchedule);
@@ -106,7 +113,9 @@ try {
             break;
         }
     }
-    if (!$hasAttendanceArchiveColumn) $db->exec('ALTER TABLE attendance ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0');
+    if (! $hasAttendanceArchiveColumn) {
+        $db->exec('ALTER TABLE attendance ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0');
+    }
     try {
         $db->exec("ALTER TABLE attendance ADD COLUMN school_year TEXT NOT NULL DEFAULT '2026-2027'");
     } catch (PDOException $error) {
@@ -153,7 +162,9 @@ try {
             ['2026-004', 'Peter Ramos', 'BSOA', '1st Year', 'Regular'],
         ];
         $statement = $db->prepare('INSERT INTO students (student_id, full_name, course, year, status) VALUES (?, ?, ?, ?, ?)');
-        foreach ($students as $student) $statement->execute($student);
+        foreach ($students as $student) {
+            $statement->execute($student);
+        }
     }
 
     $scheduleCount = (int) $db->query('SELECT COUNT(*) FROM schedules')->fetchColumn();
@@ -170,12 +181,16 @@ try {
             ['2026-003', 'Peter Ramos', 'BSOA', $today, 'Networking', '--', '--', 'Absent'],
         ];
         $statement = $db->prepare('INSERT INTO attendance (student_id, student_name, course, attendance_date, subject, time_in, time_out, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        foreach ($attendance as $record) $statement->execute($record);
+        foreach ($attendance as $record) {
+            $statement->execute($record);
+        }
     }
 
     if ((int) $db->query('SELECT COUNT(*) FROM notification_settings')->fetchColumn() === 0) {
         $statement = $db->prepare('INSERT INTO notification_settings (setting_key, setting_value) VALUES (?, ?)');
-        foreach (['absent' => 'true', 'late' => 'true', 'checkIn' => 'true'] as $key => $value) $statement->execute([$key, $value]);
+        foreach (['absent' => 'true', 'late' => 'true', 'checkIn' => 'true'] as $key => $value) {
+            $statement->execute([$key, $value]);
+        }
     }
 } catch (PDOException $error) {
     http_response_code(500);

@@ -295,31 +295,151 @@ async function openOperationMode() {
     await startCameraStream(img, placeholder, feedContainer, true);
 
     // Poll the backend for the currently detected face/student.
-    if (operationFacePollTimer) clearInterval(operationFacePollTimer);
-    operationFacePollTimer = setInterval(async function () {
-        try {
-            const data = await requestApi('camera-current-student', { method: 'GET' });
-            const info = (data && data.student) ? data.student : null;
-            const faceDetected = !!(data && data.face_detected);
-            const faceInfo = document.getElementById('faceInfo');
-            if (faceInfo) {
-                if (info && info.name) {
-                    faceInfo.textContent = 'Detected: ' + info.name + ' (' + info.student_id + ')';
-                } else if (faceDetected) {
-                    faceInfo.textContent = 'Face detected. (Recognition unavailable on this machine)';
-                } else {
-                    faceInfo.textContent = 'No face detected yet.';
-                }
-            }
-            const profileImage = document.getElementById('profileImage');
-            if (profileImage && info && info.student_id) {
-                // Try to show the student's stored face image.
-                profileImage.textContent = info.name || info.student_id;
-            }
-        } catch (error) {
-            // ignore transient errors
+    var _recordedAttendance = {};
+    function updateFaceInfoFromData(data) {
+        const info = (data && data.student) ? data.student : null;
+        const faceDetected = !!(data && data.face_detected);
+        if (!dashboardData || !Array.isArray(dashboardData.students) || dashboardData.students.length === 0) {
+            loadDashboardData().catch(function () { /* ignore */ });
         }
-    }, 1000);
+        const faceInfo = document.getElementById('faceInfo');
+        if (faceInfo) {
+            if (info && info.student_id && faceDetected) {
+                let student = (dashboardData.students || []).find(function (item) {
+                    return String(item.student_id) === String(info.student_id);
+                });
+                if (!student && info.name) {
+                    student = (dashboardData.students || []).find(function (item) {
+                        return String(item.full_name).trim().toLowerCase() === String(info.name).trim().toLowerCase();
+                    });
+                }
+                if (info && (info.course || info.year || info.full_name || info.face_image_path)) {
+                    student = Object.assign({}, student || {}, {
+                        full_name: info.full_name || (student && student.full_name) || info.name,
+                        course: info.course || (student && student.course),
+                        year: info.year || (student && student.year),
+                        age: info.age || (student && student.age),
+                        school_year: info.school_year || (student && student.school_year),
+                        status: info.status || (student && student.status),
+                        parent_phone: info.parent_phone || (student && student.parent_phone),
+                        face_image_path: info.face_image_path || (student && student.face_image_path),
+                    });
+                }
+                const details = [];
+                details.push('<div class="student-detail-row"><span class="student-detail-label">Name</span><span class="student-detail-value">' + escapeHtml((student && student.full_name) || info.name || info.student_id) + '</span></div>');
+                details.push('<div class="student-detail-row"><span class="student-detail-label">Student ID</span><span class="student-detail-value">' + escapeHtml(info.student_id) + '</span></div>');
+                if (student) {
+                    details.push('<div class="student-detail-row"><span class="student-detail-label">Course</span><span class="student-detail-value">' + escapeHtml(student.course || '\u2014') + '</span></div>');
+                    details.push('<div class="student-detail-row"><span class="student-detail-label">Year</span><span class="student-detail-value">' + escapeHtml(student.year || '\u2014') + '</span></div>');
+                    if (student.age) {
+                        details.push('<div class="student-detail-row"><span class="student-detail-label">Age</span><span class="student-detail-value">' + escapeHtml(student.age) + '</span></div>');
+                    }
+                    details.push('<div class="student-detail-row"><span class="student-detail-label">School Year</span><span class="student-detail-value">' + escapeHtml(student.school_year || '\u2014') + '</span></div>');
+                    details.push('<div class="student-detail-row"><span class="student-detail-label">Status</span><span class="student-detail-value">' + escapeHtml(student.status || '\u2014') + '</span></div>');
+                    if (student.parent_phone) {
+                        details.push('<div class="student-detail-row"><span class="student-detail-label">Parent Phone</span><span class="student-detail-value">' + escapeHtml(student.parent_phone) + '</span></div>');
+                    }
+                    if (typeof info.confidence !== 'undefined') {
+                        details.push('<div class="student-detail-row"><span class="student-detail-label">Confidence</span><span class="student-detail-value">' + escapeHtml(Number(info.confidence).toFixed(2)) + '</span></div>');
+                    }
+                } else {
+                    details.push('<div class="student-detail-row"><span class="student-detail-value">Student details not found in dashboard data (detected ID: ' + escapeHtml(info.student_id) + ').</span></div>');
+                }
+                faceInfo.innerHTML = '<div class="student-details">' + details.join('') + '</div>';
+                // Auto-record attendance when a face is detected (once per student per session).
+                if (info && info.student_id && !_recordedAttendance[info.student_id]) {
+                    _recordedAttendance[info.student_id] = true;
+                    fetch('api.php?action=record-attendance', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ studentId: info.student_id })
+                    }).then(function (r) { return r.json(); }).then(function (result) {
+                        if (result && result.action === 'time_in') {
+                            // Show a brief confirmation.
+                            var confirmEl = document.createElement('div');
+                            confirmEl.className = 'student-detail-row';
+                            confirmEl.innerHTML = '<span class="student-detail-value" style="color:#22c55e;">✓ Attendance recorded: ' + escapeHtml(result.status || 'Present') + ' at ' + escapeHtml(result.timeIn || '') + '</span>';
+                            faceInfo.querySelector('.student-details').appendChild(confirmEl);
+                        }
+                    }).catch(function () { /* ignore */ });
+                }
+            } else if (faceDetected) {
+                faceInfo.innerHTML = '<div class="student-details"><div class="student-detail-row"><span class="student-detail-value">Face detected. (Recognition unavailable on this machine)</span></div></div>';
+            } else {
+                faceInfo.innerHTML = '<div class="student-details"><div class="student-detail-row"><span class="student-detail-value">No face detected yet.</span></div></div>';
+            }
+        }
+        const profileImage = document.getElementById('profileImage');
+        if (profileImage) {
+            if (info && info.student_id && faceDetected) {
+                let student = (dashboardData.students || []).find(function (item) {
+                    return String(item.student_id) === String(info.student_id);
+                });
+                if (!student && info.name) {
+                    student = (dashboardData.students || []).find(function (item) {
+                        return String(item.full_name).trim().toLowerCase() === String(info.name).trim().toLowerCase();
+                    });
+                }
+                if (info && (info.course || info.year || info.full_name || info.face_image_path)) {
+                    student = Object.assign({}, student || {}, {
+                        full_name: info.full_name || (student && student.full_name) || info.name,
+                        face_image_path: info.face_image_path || (student && student.face_image_path),
+                    });
+                }
+                let imageMarkup = '';
+                if (student && student.face_image_path) {
+                    const firstPath = String(student.face_image_path).split(',')[0].trim().replace(/^\/+/, '');
+                    imageMarkup = '<img src="/' + escapeHtml(firstPath) + '" alt="Student profile" style="width:100%;height:100%;object-fit:cover;border-radius:8px;" onerror="this.style.display=\'none\';">';
+                }
+                profileImage.innerHTML = imageMarkup + '<span class="profile-image__name">' + escapeHtml((student && student.full_name) || info.name || info.student_id) + '</span>';
+            } else {
+                profileImage.textContent = 'No student selected.';
+            }
+        }
+    }
+
+    if (operationFacePollTimer) { clearInterval(operationFacePollTimer); operationFacePollTimer = null; }
+    if (window.faceWebSocket) { window.faceWebSocket.close(); }
+    var _lastCameraData = null;
+    var _lastFetchTime = 0;
+    function fetchCameraCurrentStudent() {
+        var now = Date.now();
+        if (now - _lastFetchTime < 300) return; // debounce
+        _lastFetchTime = now;
+        fetch('/api/camera-current-student', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (data) {
+            var key = JSON.stringify({ s: data && data.student && data.student.student_id, f: data && data.face_detected });
+            if (key === _lastCameraData) return; // cache: skip if unchanged
+            _lastCameraData = key;
+            updateFaceInfoFromData(data);
+        }).catch(function () { /* ignore */ });
+    }
+    try {
+        const ws = new WebSocket('wss://' + window.location.host + '/ws');
+        window.faceWebSocket = ws;
+        ws.onmessage = function (e) {
+            try {
+                const data = JSON.parse(e.data);
+                var key = JSON.stringify({ s: data && data.student && data.student.student_id, f: data && data.face_detected });
+                if (key === _lastCameraData) return;
+                _lastCameraData = key;
+                updateFaceInfoFromData(data);
+            } catch (err) { /* ignore */ }
+        };
+        ws.onerror = function () {
+            if (!operationFacePollTimer) {
+                operationFacePollTimer = setInterval(fetchCameraCurrentStudent, 500);
+            }
+        };
+        ws.onclose = function () {
+            if (!operationFacePollTimer) {
+                operationFacePollTimer = setInterval(fetchCameraCurrentStudent, 500);
+            }
+        };
+    } catch (e) {
+        operationFacePollTimer = setInterval(fetchCameraCurrentStudent, 500);
+    }
+    fetchCameraCurrentStudent();
 
     // Keep the stream resolution in sync with the container if its size changes
     // (e.g. when fullscreen settles or the window is resized).
@@ -364,6 +484,10 @@ async function closeOperationMode() {
     if (operationFacePollTimer) {
         clearInterval(operationFacePollTimer);
         operationFacePollTimer = null;
+    }
+    if (window.faceWebSocket) {
+        window.faceWebSocket.close();
+        window.faceWebSocket = null;
     }
     const img = document.getElementById('cameraFeedImg');
     if (img) {
@@ -1845,7 +1969,17 @@ async function startCameraStream(img, placeholder, feedContainer, force) {
         cameraStreamHeight = targetHeight;
         if (image) {
             image.style.display = 'block';
-            image.src = 'api.php?action=camera-feed&ts=' + Date.now();
+            var _retryCount = 0;
+            var _loadFeed = function () {
+                image.src = '/camera-feed';
+            };
+            image.onerror = function () {
+                if (_retryCount < 10) {
+                    _retryCount++;
+                    setTimeout(_loadFeed, 1000);
+                }
+            };
+            _loadFeed();
         }
         if (place) place.style.display = 'none';
         showCameraInitOverlay('Camera ready. Loading stream…');

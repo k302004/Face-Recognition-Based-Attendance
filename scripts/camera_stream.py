@@ -17,6 +17,12 @@ import sqlite3
 import sys
 import threading
 import time
+try:
+    import websockets
+    import asyncio
+    WEBSOCKETS_AVAILABLE = True
+except ImportError:
+    WEBSOCKETS_AVAILABLE = False
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -26,8 +32,9 @@ except ImportError:
     print('OpenCV (cv2) is not installed. Install with: pip install opencv-python', file=sys.stderr)
     raise SystemExit(1)
 
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 DEFAULT_PORT = 8090
+WEBSOCKET_PORT = 8091
 DEFAULT_CAMERA = 0
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,8 +58,12 @@ except Exception:  # pragma: no cover - depends on environment
 KNOWN_ENCODINGS = []
 KNOWN_STUDENT_IDS = []
 KNOWN_STUDENT_NAMES = {}
+STUDENT_DETAILS = {}
+KNOWN_IMAGE_FILES = set()
+http_server = None
+http_server = None
 FACE_MATCH_TOLERANCE = 0.48
-RECOGNITION_INTERVAL_SECONDS = 0.5
+RECOGNITION_INTERVAL_SECONDS = 0.25
 ABSENCE_SECONDS = 5.0
 POSE_INTERVAL_SECONDS = 0.3
 
@@ -129,6 +140,39 @@ def load_student_name_map(db_path=None):
     return mapping
 
 
+def load_student_details(db_path=None):
+    """Load full student records keyed by student_id from the SQLite DB."""
+    details = {}
+    path = Path(db_path) if db_path is not None else DB_PATH
+    if not path.is_file():
+        return details
+    try:
+        connection = sqlite3.connect(str(path))
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            "SELECT student_id, full_name, course, year, age, school_year, status, parent_phone, face_image_path "
+            "FROM students WHERE is_archived = 0"
+        ).fetchall()
+        connection.close()
+        for row in rows:
+            sid = str(row["student_id"])
+            details[sid] = {
+                "student_id": sid,
+                "name": str(row["full_name"] or sid),
+                "full_name": str(row["full_name"] or sid),
+                "course": row["course"],
+                "year": row["year"],
+                "age": row["age"],
+                "school_year": row["school_year"],
+                "status": row["status"],
+                "parent_phone": row["parent_phone"],
+                "face_image_path": row["face_image_path"],
+            }
+    except Exception as error:
+        print(f"[faces] could not read student details: {error}")
+    return details
+
+
 def load_known_faces(directory=None, student_names=None, db_path=None):
     """Load known face encodings from ``directory``.
 
@@ -136,7 +180,7 @@ def load_known_faces(directory=None, student_names=None, db_path=None):
     ``attendance_client.load_known_faces``. Recognised names are stored in the
     module-level ``KNOWN_STUDENT_NAMES`` mapping.
     """
-    global KNOWN_ENCODINGS, KNOWN_STUDENT_IDS, KNOWN_STUDENT_NAMES
+    global KNOWN_ENCODINGS, KNOWN_STUDENT_IDS, KNOWN_STUDENT_NAMES, STUDENT_DETAILS, KNOWN_IMAGE_FILES
 
     if directory is None:
         if FACE_IMAGES_DIR.is_dir():
@@ -146,6 +190,9 @@ def load_known_faces(directory=None, student_names=None, db_path=None):
     directory = Path(directory)
 
     name_map = load_student_name_map(db_path)
+    STUDENT_DETAILS = load_student_details(db_path)
+    global KNOWN_IMAGE_FILES
+    KNOWN_IMAGE_FILES = set()
     provided_names = student_names or {}
 
     encodings = []
@@ -179,6 +226,8 @@ def load_known_faces(directory=None, student_names=None, db_path=None):
         if db_entry is not None:
             student_id = db_entry[0]
             student_name = db_entry[1]
+            if student_id in STUDENT_DETAILS:
+                STUDENT_DETAILS[student_id]['full_name'] = student_name
         else:
             student_id = image_path.stem
             student_name = provided_names.get(student_id, student_id)
@@ -186,6 +235,7 @@ def load_known_faces(directory=None, student_names=None, db_path=None):
         encodings.append(face_encodings[0])
         student_ids.append(student_id)
         names[student_id] = student_name
+        KNOWN_IMAGE_FILES.add(image_path.name)
 
     if not encodings:
         print(f"[faces] no usable face images found in {directory}")
@@ -446,6 +496,30 @@ class StreamHandler(BaseHTTPRequestHandler):
             self._send_json({"student": info, "face_detected": bool(face_detected)})
             return
 
+        if self.path.startswith("/events") or self.path.startswith("/stream"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            last_payload = None
+            try:
+                while True:
+                    info = getattr(self.server, "current_student", None)
+                    face_detected = getattr(self.server, "face_detected", False)
+                    if FACE_RECOGNITION_AVAILABLE:
+                        face_detected = len(getattr(self.server, "last_face_locations", [])) > 0
+                    payload = {"student": info, "face_detected": bool(face_detected)}
+                    if payload != last_payload:
+                        self.wfile.write(("data: " + json.dumps(payload) + "\n\n").encode())
+                        self.wfile.flush()
+                        last_payload = payload
+                    time.sleep(0.25)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                pass
+            return
+
         if self.path.startswith("/face_pose") or self.path.startswith("/pose"):
             pose = getattr(self.server, "current_pose", "none")
             self._send_json({"pose": pose})
@@ -496,6 +570,56 @@ class StreamHandler(BaseHTTPRequestHandler):
 
                 # Face recognition (throttled).
                 now = time.time()
+                if now - getattr(self.server, 'last_db_reload', 0.0) >= 5.0:
+                    self.server.last_db_reload = now
+                    try:
+                        # Cheap: reload student details + name map from DB.
+                        STUDENT_DETAILS.clear()
+                        STUDENT_DETAILS.update(load_student_details())
+                        nm = load_student_name_map()
+                        # Incremental: only process NEW face image files.
+                        new_files = []
+                        directory = FACE_IMAGES_DIR if FACE_IMAGES_DIR.is_dir() else (ROOT / "known_faces")
+                        if directory.is_dir():
+                            for image_path in sorted(directory.iterdir()):
+                                if not image_path.is_file():
+                                    continue
+                                if image_path.suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp"}:
+                                    continue
+                                if image_path.name in KNOWN_IMAGE_FILES:
+                                    continue
+                                new_files.append(image_path)
+                        if new_files and FACE_RECOGNITION_AVAILABLE:
+                            for image_path in new_files:
+                                try:
+                                    image = face_recognition.load_image_file(str(image_path))
+                                    face_encodings = face_recognition.face_encodings(image)
+                                except Exception as error:
+                                    print(f"[faces] could not read {image_path.name}: {error}")
+                                    continue
+                                if len(face_encodings) != 1:
+                                    print(f"[faces] skipping {image_path.name}: expected exactly one face, found {len(face_encodings)}")
+                                    continue
+                                db_entry = nm.get(image_path.name)
+                                if db_entry is not None:
+                                    student_id = db_entry[0]
+                                    student_name = db_entry[1]
+                                else:
+                                    student_id = image_path.stem
+                                    student_name = student_id
+                                KNOWN_ENCODINGS.append(face_encodings[0])
+                                KNOWN_STUDENT_IDS.append(student_id)
+                                KNOWN_STUDENT_NAMES[student_id] = student_name
+                                KNOWN_IMAGE_FILES.add(image_path.name)
+                                if student_id in STUDENT_DETAILS:
+                                    STUDENT_DETAILS[student_id]['full_name'] = student_name
+                                print(f"[faces] added new face: {image_path.name} -> {student_id}")
+                        # Refresh names from DB for existing students (cheap).
+                        for sid in list(KNOWN_STUDENT_NAMES.keys()):
+                            if sid in STUDENT_DETAILS:
+                                KNOWN_STUDENT_NAMES[sid] = STUDENT_DETAILS[sid].get('full_name', KNOWN_STUDENT_NAMES[sid])
+                    except Exception as e:
+                        print(f"[faces] reload error: {e}")
                 if FACE_RECOGNITION_AVAILABLE and (now - getattr(self.server, "last_recognition_time", 0.0) >= RECOGNITION_INTERVAL_SECONDS):
                     self.server.last_recognition_time = now
                     locations, matched_ids, names, confidences = recognize_frame(frame)
@@ -508,6 +632,10 @@ class StreamHandler(BaseHTTPRequestHandler):
                     for sid, name, conf in zip(matched_ids, names, confidences):
                         if sid is not None:
                             current = {"student_id": sid, "name": name, "confidence": conf, "timestamp": now}
+                            details = STUDENT_DETAILS.get(str(sid))
+                            if details:
+                                current.update({k: v for k, v in details.items() if k not in ("student_id", "name")})
+                                current["full_name"] = details.get("full_name") or name
                             break
                     if current is not None:
                         self.server.current_student = current
@@ -565,6 +693,43 @@ class StreamHandler(BaseHTTPRequestHandler):
         pass
 
 
+
+async def websocket_handler(websocket):
+    """Push face detection updates to connected clients."""
+    last_payload = None
+    try:
+        while True:
+            info = getattr(http_server, "current_student", None)
+            face_detected = getattr(http_server, "face_detected", False)
+            if FACE_RECOGNITION_AVAILABLE:
+                face_detected = len(getattr(http_server, "last_face_locations", [])) > 0
+            payload = {"student": info, "face_detected": bool(face_detected)}
+            if payload != last_payload:
+                await websocket.send(json.dumps(payload))
+                last_payload = payload
+            await asyncio.sleep(0.25)
+    except websockets.exceptions.ConnectionClosed:
+        pass
+
+
+def start_websocket_server():
+    """Run the WebSocket server in a separate thread."""
+    if not WEBSOCKETS_AVAILABLE:
+        print("[ws] websockets library not available, skipping WebSocket server")
+        return
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    async def serve():
+        async with websockets.serve(websocket_handler, HOST, WEBSOCKET_PORT):
+            await asyncio.Future()  # run forever
+
+    try:
+        loop.run_until_complete(serve())
+    except Exception as e:
+        print(f"[ws] WebSocket server error: {e}")
+
+
 def main():
     camera_index, port, target_width, target_height = parse_args()
 
@@ -588,6 +753,7 @@ def main():
     server.current_student = None
     server.current_student_seen_at = 0.0
     server.last_recognition_time = 0.0
+    server.last_db_reload = 0.0
     server.current_pose = "none"
     server.last_pose_time = 0.0
     server.face_detected = False
@@ -595,6 +761,13 @@ def main():
     server.last_face_locations = []
     server.last_face_names = []
     server.last_face_ids = []
+    global http_server
+    http_server = server
+    # Start WebSocket server in a separate thread.
+    ws_thread = threading.Thread(target=start_websocket_server, daemon=True)
+    ws_thread.start()
+    if WEBSOCKETS_AVAILABLE:
+        print(f"[ws] WebSocket server starting on ws://{HOST}:{WEBSOCKET_PORT}")
     try:
         server.serve_forever()
     finally:
