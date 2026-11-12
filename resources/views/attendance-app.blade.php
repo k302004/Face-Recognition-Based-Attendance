@@ -141,7 +141,6 @@
                         </div>
                         <div class="toolbar-actions">
                             <button class="add-btn archive-school-year-btn" type="button" data-admin-only="true" onclick="openArchiveSchoolYearModal()">Archive</button>
-                            <button class="add-btn toolbar-primary" type="button" data-admin-only="true" onclick="openStudentModal()">+ Add Student</button>
                         </div>
                     </div>
 
