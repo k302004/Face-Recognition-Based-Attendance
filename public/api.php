@@ -196,48 +196,6 @@ function audit(PDO $db, string $action): void
     $statement = $db->prepare('INSERT INTO audit_logs (action, actor) VALUES (?, ?)');
     $statement->execute([$action, $actor]);
 }
-function scheduleTime(string $time): ?DateTime
-{
-    $date = DateTime::createFromFormat('Y-m-d g:i A', date('Y-m-d').' '.trim($time));
-
-    return $date ?: null;
-}
-function markCompletedSchedulesAbsent(PDO $db): void
-{
-    $today = date('F j, Y');
-    $day = date('l');
-    $schedules = $db->prepare('SELECT subject, start_time, end_time, school_year FROM schedules WHERE day = ? AND is_archived = 0');
-    $schedules->execute([$day]);
-    $insert = $db->prepare('INSERT INTO attendance (student_id, student_name, course, attendance_date, subject, time_in, time_out, status, school_year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    foreach ($schedules->fetchAll() as $schedule) {
-        $end = scheduleTime((string) $schedule['end_time']);
-        if (! $end || new DateTime <= $end) {
-            continue;
-        }
-        $students = $db->prepare('SELECT student_id, full_name, course, school_year FROM students WHERE is_archived = 0 AND school_year = ?');
-        $students->execute([$schedule['school_year']]);
-        foreach ($students->fetchAll() as $student) {
-            $existing = $db->prepare('SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject = ? LIMIT 1');
-            $existing->execute([$student['student_id'], $today, $schedule['subject']]);
-            if (! $existing->fetch()) {
-                $insert->execute([$student['student_id'], $student['full_name'], $student['course'], $today, $schedule['subject'], '--', '--', 'Absent', $student['school_year']]);
-            }
-        }
-    }
-}
-function statusForScan(PDO $db, string $subject): string
-{
-    $schedule = $db->prepare('SELECT start_time FROM schedules WHERE subject = ? AND day = ? AND is_archived = 0 ORDER BY start_time LIMIT 1');
-    $schedule->execute([$subject, date('l')]);
-    $record = $schedule->fetch();
-    if (! $record) {
-        return 'Present';
-    }
-    $start = scheduleTime((string) $record['start_time']);
-
-    return $start && new DateTime > $start ? 'Late' : 'Present';
-}
-
 $action = $_GET['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 $payload = data();
@@ -321,21 +279,13 @@ if ($action === 'me') {
 if ($method === 'POST' && $action === 'record-attendance') {
     requireLogin();
     $studentId = trim((string) ($payload['studentId'] ?? ''));
-    $subject = trim((string) ($payload['subject'] ?? ''));
+    $subject = 'General';
     $attendanceAction = trim((string) ($payload['attendanceAction'] ?? 'time_in'));
-    markCompletedSchedulesAbsent($db);
-    if ($subject === '') {
-        // Use today's first active schedule, or a default.
-        $scheduleStatement = $db->prepare('SELECT subject FROM schedules WHERE day = ? AND is_archived = 0 ORDER BY start_time LIMIT 1');
-        $scheduleStatement->execute([date('l')]);
-        $scheduleRecord = $scheduleStatement->fetch();
-        $subject = $scheduleRecord ? (string) $scheduleRecord['subject'] : 'General';
-    }
-    $status = statusForScan($db, $subject);
+    $status = 'Present';
     $timeIn = date('g:i A');
     $timeOut = '--';
-    if ($studentId === '' || ! in_array($status, ['Present', 'Late'], true)) {
-        reply(['message' => 'studentId and a valid status are required.'], 400);
+    if ($studentId === '') {
+        reply(['message' => 'studentId is required.'], 400);
     }
     $studentStatement = $db->prepare('SELECT student_id, full_name, course, school_year, parent_phone FROM students WHERE student_id = ? AND is_archived = 0 LIMIT 1');
     $studentStatement->execute([$studentId]);
@@ -344,32 +294,32 @@ if ($method === 'POST' && $action === 'record-attendance') {
         reply(['message' => 'Student was not found or is archived.'], 404);
     }
     $attendanceDate = date('F j, Y');
-    $openAttendanceStatement = $db->prepare("SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject = ? AND time_in <> '--' AND time_in <> '' AND (time_out = '--' OR time_out = '') ORDER BY id DESC LIMIT 1");
-    $openAttendanceStatement->execute([$studentId, $attendanceDate, $subject]);
+    $openAttendanceStatement = $db->prepare("SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND time_in <> '--' AND time_in <> '' AND (time_out = '--' OR time_out = '') ORDER BY id DESC LIMIT 1");
+    $openAttendanceStatement->execute([$studentId, $attendanceDate]);
     $openAttendance = $openAttendanceStatement->fetch();
     if ($attendanceAction === 'time_out') {
         if (! $openAttendance) {
-            $attendanceExistsStatement = $db->prepare('SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject = ? LIMIT 1');
-            $attendanceExistsStatement->execute([$studentId, $attendanceDate, $subject]);
+            $attendanceExistsStatement = $db->prepare("SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND time_in <> '--' AND time_in <> '' LIMIT 1");
+            $attendanceExistsStatement->execute([$studentId, $attendanceDate]);
             $attendanceExists = $attendanceExistsStatement->fetch();
             if (! $attendanceExists) {
-                reply(['message' => 'No time in record found for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'no_time_in']);
+                reply(['message' => 'No open time in record found for this student today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'no_time_in']);
             }
 
-            reply(['message' => 'Time out already recorded for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
+            reply(['message' => 'Time out already recorded for this student today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
         }
         $timeOut = date('g:i A');
         $update = $db->prepare("UPDATE attendance SET time_out = ? WHERE id = ? AND (time_out = '--' OR time_out = '')");
         $update->execute([$timeOut, $openAttendance['id']]);
         if ($update->rowCount() === 0) {
-            reply(['message' => 'Time out already recorded for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
+            reply(['message' => 'Time out already recorded for this student today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
         }
         audit($db, 'Recorded time out for '.$studentId);
         reply(['message' => 'Time out recorded.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'parentPhone' => $student['parent_phone'], 'date' => $attendanceDate, 'timeOut' => $timeOut, 'subject' => $subject, 'status' => $status, 'action' => 'time_out']);
     }
     // time_in mode
     if ($openAttendance) {
-        reply(['message' => 'Time in already recorded for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
+        reply(['message' => 'Time in already recorded for this student today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
     }
     $statement = $db->prepare('INSERT INTO attendance (student_id, student_name, course, attendance_date, subject, time_in, time_out, status, school_year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $statement->execute([$student['student_id'], $student['full_name'], $student['course'], $attendanceDate, $subject, $timeIn, $timeOut, $status, $student['school_year']]);
@@ -385,13 +335,12 @@ if ($method === 'POST' && $action === 'device-attendance') {
     }
 
     $studentId = trim((string) ($payload['studentId'] ?? ''));
-    $subject = trim((string) ($payload['subject'] ?? ''));
-    markCompletedSchedulesAbsent($db);
-    $status = statusForScan($db, $subject);
+    $subject = 'General';
+    $status = 'Present';
     $timeIn = date('g:i A');
     $timeOut = trim((string) ($payload['timeOut'] ?? '--'));
-    if ($studentId === '' || $subject === '' || ! in_array($status, ['Present', 'Late'], true)) {
-        reply(['message' => 'studentId, subject, and a valid status are required.'], 400);
+    if ($studentId === '') {
+        reply(['message' => 'studentId is required.'], 400);
     }
 
     $studentStatement = $db->prepare('SELECT student_id, full_name, course, school_year, parent_phone FROM students WHERE student_id = ? AND is_archived = 0 LIMIT 1');
@@ -402,15 +351,15 @@ if ($method === 'POST' && $action === 'device-attendance') {
     }
 
     $attendanceDate = date('F j, Y');
-    $openAttendanceStatement = $db->prepare("SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject = ? AND time_in <> '--' AND time_in <> '' AND (time_out = '--' OR time_out = '') ORDER BY id DESC LIMIT 1");
-    $openAttendanceStatement->execute([$studentId, $attendanceDate, $subject]);
+    $openAttendanceStatement = $db->prepare("SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND time_in <> '--' AND time_in <> '' AND (time_out = '--' OR time_out = '') ORDER BY id DESC LIMIT 1");
+    $openAttendanceStatement->execute([$studentId, $attendanceDate]);
     $openAttendance = $openAttendanceStatement->fetch();
     if ($openAttendance) {
         $timeOut = date('g:i A');
         $update = $db->prepare("UPDATE attendance SET time_out = ? WHERE id = ? AND (time_out = '--' OR time_out = '')");
         $update->execute([$timeOut, $openAttendance['id']]);
         if ($update->rowCount() === 0) {
-            reply(['message' => 'Time out already recorded for this student and subject today.'], 409);
+            reply(['message' => 'Time out already recorded for this student today.'], 409);
         }
         audit($db, 'Device recorded time out for '.$studentId);
         reply(['message' => 'Time out recorded.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'parentPhone' => $student['parent_phone'], 'date' => $attendanceDate, 'timeOut' => $timeOut, 'action' => 'time_out']);
@@ -528,7 +477,6 @@ if ($method === 'POST' && $action === 'password') {
 }
 
 if ($method === 'GET' && $action === 'dashboard') {
-    markCompletedSchedulesAbsent($db);
     $students = $db->query('SELECT id, student_id, full_name, course, year, age, school_year, status, parent_phone, is_archived, archived_school_year, face_image_path FROM students ORDER BY full_name COLLATE NOCASE')->fetchAll();
     $schedules = $db->query('SELECT id, subject, instructor, room, day, start_time, end_time, school_year, is_archived, archived_school_year FROM schedules ORDER BY day, start_time')->fetchAll();
     $attendance = $db->query('SELECT student_id, student_name, course, attendance_date, subject, time_in, time_out, status, school_year, is_archived, archived_school_year FROM attendance ORDER BY id')->fetchAll();

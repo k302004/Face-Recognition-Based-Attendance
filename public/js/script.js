@@ -407,6 +407,9 @@ async function openOperationMode() {
                                 : '✓ Time Out recorded at ' + escapeHtml(result.timeOut || '');
                             confirmEl.innerHTML = '<span class="student-detail-value" style="color:' + color + ';">' + text + '</span>';
                             faceInfo.querySelector('.student-details').appendChild(confirmEl);
+                            refreshAttendanceRecords().catch(function (error) {
+                                console.error('Attendance was recorded, but the attendance list could not be refreshed.', error);
+                            });
                         }
                     }).catch(function () { /* ignore */ });
                 }
@@ -610,22 +613,7 @@ async function loadDashboardData() {
         filterStudents();
         renderArchivedStudents();
     }
-    const attendanceBody = document.getElementById('attendanceTableBody');
-    if (attendanceBody) {
-        attendanceBody.innerHTML = dashboardData.attendance.map(function (record) {
-            return `<tr data-course="${escapeHtml(record.course)}" data-attendance-date="${attendanceDateKey(record.attendance_date)}" data-attendance-archived="${Number(record.is_archived) === 1}"><td>${escapeHtml(record.student_id)}</td><td>${escapeHtml(record.student_name)}</td><td>${escapeHtml(record.attendance_date)}</td><td>${escapeHtml(record.subject)}</td><td>${escapeHtml(record.time_in)}</td><td>${escapeHtml(record.time_out)}</td><td>${statusBadge(record.status)}</td><td><details class="row-menu"><summary aria-label="Attendance actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button">View</button></div></details></td></tr>`;
-        }).join('');
-        getAttendanceRows().forEach(function (row) { row.dataset.matchesFilter = 'true'; });
-        renderAttendanceDateControls();
-        applyAttendanceFilters();
-    }
-    const scheduleBody = document.getElementById('scheduleTableBody');
-    if (scheduleBody) {
-        scheduleBody.innerHTML = dashboardData.schedules.map(function (schedule) {
-            return `<tr data-schedule-id="${escapeHtml(schedule.id)}" data-school-year="${escapeHtml(schedule.school_year || '2026-2027')}"><td>${escapeHtml(schedule.school_year || '2026-2027')}</td><td>${escapeHtml(schedule.subject)}</td><td>${escapeHtml(schedule.instructor)}</td><td>${escapeHtml(schedule.room)}</td><td>${escapeHtml(schedule.day)}</td><td>${escapeHtml(schedule.start_time)} - ${escapeHtml(schedule.end_time)}</td><td><details class="row-menu"><summary aria-label="Schedule actions">•••</summary><div class="row-menu__content"><button class="menu-item edit-btn" type="button" onclick="editRow(this)">Edit</button><button class="menu-item delete-btn" type="button" onclick="openDeleteModal(this)">Delete</button></div></details></td></tr>`;
-        }).join('');
-        applyScheduleFilters();
-    }
+    renderAttendanceTable();
     renderAuditLog();
     renderAttendanceHistory();
     updateOverviewStats();
@@ -633,6 +621,29 @@ async function loadDashboardData() {
     loadNotificationSettingsFromData();
     applyRolePermissions(document.getElementById('appShell').dataset.role || 'Administrator');
     applySavedDashboardView();
+}
+
+function renderAttendanceTable() {
+    const attendanceBody = document.getElementById('attendanceTableBody');
+    if (!attendanceBody) {
+        return;
+    }
+
+    attendanceBody.innerHTML = dashboardData.attendance.map(function (record) {
+        return `<tr data-course="${escapeHtml(record.course)}" data-attendance-date="${attendanceDateKey(record.attendance_date)}" data-attendance-archived="${Number(record.is_archived) === 1}"><td>${escapeHtml(record.student_id)}</td><td>${escapeHtml(record.student_name)}</td><td>${escapeHtml(record.attendance_date)}</td><td>${escapeHtml(record.time_in)}</td><td>${escapeHtml(record.time_out)}</td><td>${statusBadge(record.status)}</td><td><details class="row-menu"><summary aria-label="Attendance actions">•••</summary><div class="row-menu__content"><button class="menu-item" type="button">View</button></div></details></td></tr>`;
+    }).join('');
+    getAttendanceRows().forEach(function (row) { row.dataset.matchesFilter = 'true'; });
+    renderAttendanceDateControls();
+    applyAttendanceFilters();
+}
+
+async function refreshAttendanceRecords() {
+    const data = await requestApi('dashboard', { method: 'GET' });
+    dashboardData.attendance = data.attendance;
+    attendanceState.selectedDate = attendanceDateKey(new Date());
+    renderAttendanceTable();
+    renderAttendanceHistory();
+    updateOverviewStats();
 }
 
 function showAuth() {
@@ -941,7 +952,6 @@ document.querySelectorAll('.nav-link').forEach(function (link) {
             localStorage.setItem(SETTINGS_KEY, JSON.stringify(dashboardSettings));
         }
         document.getElementById('homeView').hidden = target !== 'home';
-        document.getElementById('scheduleView').hidden = target !== 'schedule';
         document.getElementById('attendanceView').hidden = target !== 'attendance';
         document.getElementById('reportView').hidden = target !== 'report';
         document.getElementById('overviewView').hidden = target !== 'overview';
@@ -995,11 +1005,34 @@ function renderAttendanceDateControls() {
     const todayKey = attendanceDateKey(new Date());
     const label = document.getElementById('attendanceDateLabel');
     const nextButton = document.querySelector('.attendance-date-nav .date-nav-button:nth-of-type(2)');
+    const datePicker = document.getElementById('attendanceDatePicker');
     if (label) label.textContent = attendanceState.selectedDate === todayKey ? 'Today' : attendanceDateLabel(attendanceState.selectedDate);
     if (nextButton) nextButton.disabled = attendanceState.selectedDate >= todayKey;
+    if (datePicker) {
+        datePicker.max = todayKey;
+        datePicker.value = attendanceState.selectedDate;
+    }
+}
+
+function openAttendanceDatePicker() {
+    const datePicker = document.getElementById('attendanceDatePicker');
+    if (!datePicker) {
+        return;
+    }
+
+    if (typeof datePicker.showPicker === 'function') {
+        datePicker.showPicker();
+        return;
+    }
+
+    datePicker.focus();
+    datePicker.click();
 }
 
 function selectAttendanceDate(dateKey) {
+    if (!dateKey) {
+        return;
+    }
     const todayKey = attendanceDateKey(new Date());
     attendanceState.selectedDate = dateKey > todayKey ? todayKey : dateKey;
     renderAttendanceDateControls();
@@ -1044,13 +1077,12 @@ function getAttendanceRows() {
 }
 
 function getAttendanceValue(row, key) {
-    const cellMap = { id: 0, name: 1, date: 2, subject: 3, timeIn: 4, timeOut: 5, status: 6 };
+    const cellMap = { id: 0, name: 1, date: 2, timeIn: 3, timeOut: 4, status: 5 };
     return (row.cells[cellMap[key]]?.textContent || '').trim().toLowerCase();
 }
 
 function applyAttendanceFilters() {
     const search = document.getElementById('attendanceSearch').value.trim().toLowerCase();
-    const subject = document.getElementById('attendanceSubjectFilter').value;
     const status = document.getElementById('attendanceStatusFilter').value;
     const course = document.getElementById('attendanceCourseFilter').value;
 
@@ -1058,8 +1090,7 @@ function applyAttendanceFilters() {
         const matches = (!search || getAttendanceValue(row, 'name').includes(search))
             && row.dataset.attendanceDate === attendanceState.selectedDate
             && row.dataset.attendanceArchived !== 'true'
-            && (!subject || row.cells[3].textContent.trim() === subject)
-            && (!status || row.cells[6].textContent.trim() === status)
+            && (!status || row.cells[5].textContent.trim() === status)
             && (!course || row.dataset.course === course);
         row.dataset.matchesFilter = String(matches);
     });
@@ -1103,7 +1134,6 @@ async function confirmAttendanceArchive() {
 
 function resetAttendanceFilters() {
     document.getElementById('attendanceSearch').value = '';
-    document.getElementById('attendanceSubjectFilter').value = '';
     document.getElementById('attendanceStatusFilter').value = '';
     document.getElementById('attendanceCourseFilter').value = '';
     getAttendanceRows().forEach(function (row) {
@@ -1426,9 +1456,6 @@ function getArchivedYearData(year) {
         attendance: (dashboardData.attendance || []).filter(function (record) {
             return record.school_year === year || record.archived_school_year === year || studentIds.has(record.student_id);
         }),
-        schedules: (dashboardData.schedules || []).filter(function (schedule) {
-            return schedule.school_year === year || schedule.archived_school_year === year;
-        })
     };
 }
 
@@ -1468,12 +1495,8 @@ function renderArchivedCategory() {
             return `<tr><td>${escapeHtml(student.student_id)}</td><td>${escapeHtml(student.full_name)}</td><td>${escapeHtml(student.course)}</td><td>${escapeHtml(student.year)}</td><td>${statusBadge(student.status)}</td></tr>`;
         }).join(''));
     } else if (archivedCategory === 'attendance') {
-        content.innerHTML = archivedTable('Attendance', ['Student ID', 'Student Name', 'Date', 'Subject', 'Time In', 'Time Out', 'Status'], data.attendance.map(function (record) {
-            return `<tr><td>${escapeHtml(record.student_id)}</td><td>${escapeHtml(record.student_name)}</td><td>${escapeHtml(record.attendance_date)}</td><td>${escapeHtml(record.subject)}</td><td>${escapeHtml(record.time_in)}</td><td>${escapeHtml(record.time_out)}</td><td>${statusBadge(record.status)}</td></tr>`;
-        }).join(''));
-    } else if (archivedCategory === 'schedule') {
-        content.innerHTML = archivedTable('Schedule', ['School Year', 'Subject', 'Instructor', 'Room', 'Day', 'Time'], data.schedules.map(function (schedule) {
-            return `<tr><td>${escapeHtml(schedule.school_year || schedule.archived_school_year || archivedYear)}</td><td>${escapeHtml(schedule.subject)}</td><td>${escapeHtml(schedule.instructor)}</td><td>${escapeHtml(schedule.room)}</td><td>${escapeHtml(schedule.day)}</td><td>${escapeHtml(schedule.start_time)} - ${escapeHtml(schedule.end_time)}</td></tr>`;
+        content.innerHTML = archivedTable('Attendance', ['Student ID', 'Student Name', 'Date', 'Time In', 'Time Out', 'Status'], data.attendance.map(function (record) {
+            return `<tr><td>${escapeHtml(record.student_id)}</td><td>${escapeHtml(record.student_name)}</td><td>${escapeHtml(record.attendance_date)}</td><td>${escapeHtml(record.time_in)}</td><td>${escapeHtml(record.time_out)}</td><td>${statusBadge(record.status)}</td></tr>`;
         }).join(''));
     } else if (archivedCategory === 'report') {
         renderArchivedReport(content, data);
@@ -1543,7 +1566,7 @@ function renderArchivedOverview(content, data) {
     const absent = data.attendance.filter(function (record) { return record.status === 'Absent'; }).length;
     const total = present + late + absent;
     const rate = total ? Math.round(((present + late) / total) * 100) : 0;
-    content.innerHTML = `<div class="summary archive-overview-summary"><div class="card"><h2>Total Students</h2><p>${data.students.length}</p></div><div class="card"><h2>Present</h2><p>${present}</p></div><div class="card"><h2>Late</h2><p>${late}</p></div><div class="card"><h2>Absent</h2><p>${absent}</p></div><div class="card"><h2>Attendance Records</h2><p>${total}</p></div><div class="card"><h2>Schedules</h2><p>${data.schedules.length}</p></div><div class="card"><h2>Attendance Rate</h2><p>${rate}%</p></div>${periodCards}</div><p class="overview-updated">Overview calculated from all archived records for ${escapeHtml(archivedYear)}.</p>`;
+    content.innerHTML = `<div class="summary archive-overview-summary"><div class="card"><h2>Total Students</h2><p>${data.students.length}</p></div><div class="card"><h2>Present</h2><p>${present}</p></div><div class="card"><h2>Late</h2><p>${late}</p></div><div class="card"><h2>Absent</h2><p>${absent}</p></div><div class="card"><h2>Attendance Records</h2><p>${total}</p></div><div class="card"><h2>Attendance Rate</h2><p>${rate}%</p></div>${periodCards}</div><p class="overview-updated">Overview calculated from all archived records for ${escapeHtml(archivedYear)}.</p>`;
 }
 
 document.querySelectorAll('.archive-category-tab').forEach(function (tab) {
@@ -1786,9 +1809,9 @@ function applySavedDashboardView() {
 
 function updateOverviewStats() {
     const rows = Array.from(document.querySelectorAll('#attendanceTableBody tr'));
-    const present = rows.filter(function (row) { return row.cells[6].textContent.trim() === 'Present'; }).length;
-    const late = rows.filter(function (row) { return row.cells[6].textContent.trim() === 'Late'; }).length;
-    const absent = rows.filter(function (row) { return row.cells[6].textContent.trim() === 'Absent'; }).length;
+    const present = rows.filter(function (row) { return row.cells[5].textContent.trim() === 'Present'; }).length;
+    const late = rows.filter(function (row) { return row.cells[5].textContent.trim() === 'Late'; }).length;
+    const absent = rows.filter(function (row) { return row.cells[5].textContent.trim() === 'Absent'; }).length;
     const total = present + late + absent;
     const cards = document.querySelectorAll('#overviewView .summary-card p');
     if (cards.length >= 4) {

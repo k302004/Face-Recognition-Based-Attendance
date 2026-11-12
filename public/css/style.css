@@ -181,7 +181,8 @@ body[data-theme='dark'] .tool-btn,
 body[data-theme='dark'] .row-menu > summary,
 body[data-theme='dark'] .toolbar-search,
 body[data-theme='dark'] .date-nav-button,
-body[data-theme='dark'] .today-button {
+body[data-theme='dark'] .today-button,
+body[data-theme='dark'] .attendance-date-picker-input {
     background: #261d1f;
     border-color: #594247;
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
@@ -203,7 +204,8 @@ body[data-theme='dark'] .toolbar-search input,
 body[data-theme='dark'] .tool-btn,
 body[data-theme='dark'] .row-menu > summary,
 body[data-theme='dark'] .date-nav-button,
-body[data-theme='dark'] .today-button {
+body[data-theme='dark'] .today-button,
+body[data-theme='dark'] .attendance-date-picker-input {
     color: #d8c7ca;
 }
 
@@ -1784,6 +1786,21 @@ tr:hover {
     padding: 6px 11px;
 }
 
+.attendance-date-picker-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+}
+
+.today-button:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+}
+
 .date-nav-button:disabled {
     cursor: not-allowed;
     opacity: 0.45;
@@ -2698,6 +2715,11 @@ tr:hover {
         justify-content: center;
     }
 
+    .site-header__actions {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
     .actions {
         justify-content: center;
     }
@@ -3541,28 +3563,49 @@ tr:hover {
     color: #333;
 }
 
-.operation-start-wrap {
+.site-header__actions {
     display: flex;
-    justify-content: center;
-    margin: 24px 0 16px;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 12px;
 }
 
-.start-operation-btn {
-    font-size: 24px;
-    font-weight: 700;
-    padding: 24px 48px;
-    border: none;
-    border-radius: 16px;
-    background: #2563eb;
-    color: #ffffff;
+.header-operation-btn {
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    background: var(--accent);
+    color: #2b1d16;
     cursor: pointer;
-    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 10px 14px;
+    white-space: nowrap;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
-.start-operation-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.45);
+.header-operation-btn:hover {
+    background: var(--brand-strong);
+    border-color: var(--brand-strong);
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.header-operation-btn:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+}
+
+body[data-theme='dark'] .header-operation-btn {
+    background: var(--accent);
+    border-color: #f0d48b;
+    color: #171315;
+}
+
+body[data-theme='dark'] .header-operation-btn:hover {
+    background: #f0d48b;
+    border-color: #f0d48b;
+    color: #171315;
 }
 
 .operation-grid {
@@ -3947,4 +3990,78 @@ body.operation-mode-active .operation-grid {
 .registration-loading .spinner {
     border-color: #e5e7eb;
     border-top-color: #111;
+}
+
+body[data-theme='dark'] .setup-card {
+    background: #261d1f;
+    border-color: #594247;
+    color: #f5eeee;
+}
+
+body[data-theme='dark'] .setup-note,
+body[data-theme='dark'] .setup-status,
+body[data-theme='dark'] .setup-summary,
+body[data-theme='dark'] #studentRegistrationView .title p,
+body[data-theme='dark'] #studentRegistrationView .section-eyebrow,
+body[data-theme='dark'] .registration-form label {
+    color: #d8c7ca;
+}
+
+body[data-theme='dark'] .camera-option {
+    background: #21191b;
+    border-color: #594247;
+    color: #f5eeee;
+}
+
+body[data-theme='dark'] .registration-form input,
+body[data-theme='dark'] .registration-form select {
+    background: #1c1718;
+    border-color: #654d52;
+    color: #fff4ef;
+}
+
+body[data-theme='dark'] .registration-form input::placeholder {
+    color: #987f84;
+}
+
+body[data-theme='dark'] .registration-form input:focus,
+body[data-theme='dark'] .registration-form select:focus {
+    border-color: #f5d995;
+}
+
+body[data-theme='dark'] .capture-actions .tool-btn {
+    background: #261d1f;
+    border-color: #594247;
+    color: #eadde0;
+}
+
+body[data-theme='dark'] .capture-actions .tool-btn:hover {
+    background: #38292c;
+    border-color: #f5d995;
+}
+
+body[data-theme='dark'] .registration-capture-item {
+    color: #d8c7ca;
+}
+
+body[data-theme='dark'] .registration-capture-item img {
+    border-color: #594247;
+}
+
+body[data-theme='dark'] .registration-loading {
+    color: #f5d995;
+}
+
+body[data-theme='dark'] .registration-loading .spinner {
+    border-color: #594247;
+    border-top-color: #f5d995;
+}
+
+body[data-theme='dark'] .registration-capture .save-btn {
+    background: var(--accent);
+    color: #171315;
+}
+
+body[data-theme='dark'] .registration-capture .save-btn:hover {
+    background: #f0d48b;
 }

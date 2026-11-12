@@ -90,7 +90,6 @@
                     <nav class="site-nav" aria-label="Primary navigation">
                         <ul class="site-nav__list">
                             <li><a href="#" class="nav-link active" data-view="home">Home</a></li>
-                            <li><a href="#" class="nav-link" data-view="schedule">Schedule</a></li>
                             <li><a href="#" class="nav-link" data-view="attendance">Attendance</a></li>
                             <li><a href="#" class="nav-link" data-view="report">Report</a></li>
                             <li><a href="#" class="nav-link" data-view="overview">Overview</a></li>
@@ -101,19 +100,22 @@
                         </ul>
                     </nav>
 
-                    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode">Dark mode</button>
-                    <div class="admin">
-                        <button class="admin-btn" type="button" aria-expanded="false" aria-controls="menu" onclick="toggleMenu()">
-                            <span class="admin-icon" aria-hidden="true">👤</span>
-                            <span class="caret" aria-hidden="true">▼</span>
-                        </button>
+                    <div class="site-header__actions">
+                        <button class="header-operation-btn" type="button" onclick="openOperationMode()">Start Operation Mode</button>
+                        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode">Dark mode</button>
+                        <div class="admin">
+                            <button class="admin-btn" type="button" aria-expanded="false" aria-controls="menu" onclick="toggleMenu()">
+                                <span class="admin-icon" aria-hidden="true">👤</span>
+                                <span class="caret" aria-hidden="true">▼</span>
+                            </button>
 
-                        <div class="dropdown" id="menu" role="menu">
-                            <div class="account-menu-heading">Account</div>
-                            <a href="#" id="profileLink">My Profile</a>
-                            <a href="#" id="settingsLink">Account Settings</a>
-                            <div class="account-menu-divider"></div>
-                            <a href="#" id="logoutLink">Logout</a>
+                            <div class="dropdown" id="menu" role="menu">
+                                <div class="account-menu-heading">Account</div>
+                                <a href="#" id="profileLink">My Profile</a>
+                                <a href="#" id="settingsLink">Account Settings</a>
+                                <div class="account-menu-divider"></div>
+                                <a href="#" id="logoutLink">Logout</a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -129,12 +131,8 @@
                 <section id="homeView" class="view-section">
                     <section class="welcome" aria-labelledby="dashboard-title">
                         <h1 id="dashboard-title">Welcome, Administrator!</h1>
-                        <p>Manage student attendance, schedules, and reports from this dashboard.</p>
+                        <p>Manage students, attendance, and reports from this dashboard.</p>
                     </section>
-
-                    <div class="operation-start-wrap">
-                        <button class="start-operation-btn" type="button" onclick="openOperationMode()">Start Operation Mode</button>
-                    </div>
 
                     <div class="view-toolbar" aria-label="Student list tools">
                         <div class="toolbar-search">
@@ -242,7 +240,6 @@
                     <nav class="archive-category-tabs" aria-label="Archived data categories">
                         <button type="button" class="archive-category-tab active" data-archive-category="students">Students</button>
                         <button type="button" class="archive-category-tab" data-archive-category="attendance">Attendance</button>
-                        <button type="button" class="archive-category-tab" data-archive-category="schedule">Schedule</button>
                         <button type="button" class="archive-category-tab" data-archive-category="report">Report</button>
                         <button type="button" class="archive-category-tab" data-archive-category="overview">Overview</button>
                     </nav>
@@ -258,6 +255,8 @@
                                 <strong id="attendanceDateLabel">Today</strong>
                                 <button class="date-nav-button" type="button" aria-label="Next day" onclick="changeAttendanceDate(1)">→</button>
                                 <button class="today-button" type="button" onclick="goToAttendanceToday()">Today</button>
+                                <button class="today-button" type="button" onclick="openAttendanceDatePicker()">Select day</button>
+                                <input class="attendance-date-picker-input" id="attendanceDatePicker" type="date" aria-label="Select attendance date" onchange="selectAttendanceDate(this.value)">
                             </div>
                         </div>
                         <div class="view-toolbar" aria-label="Attendance tools">
@@ -265,7 +264,6 @@
                             <details class="toolbar-menu">
                                 <summary class="tool-btn"><span aria-hidden="true">⚙</span> Filter</summary>
                                 <div class="tool-popover filter-popover">
-                                    <label>Subject <select id="attendanceSubjectFilter"><option value="">All subjects</option><option value="Programming 1">Programming 1</option><option value="Database">Database</option><option value="Networking">Networking</option></select></label>
                                     <label>Status <select id="attendanceStatusFilter"><option value="">All statuses</option><option value="Present">Present</option><option value="Late">Late</option><option value="Absent">Absent</option></select></label>
                                     <label>Course <select id="attendanceCourseFilter"><option value="">All courses</option><option value="BSCS">BSCS</option><option value="BSIT">BSIT</option><option value="BSOA">BSOA</option></select></label>
                                     <div class="filter-actions"><button class="menu-item" type="button" onclick="applyAttendanceFilters()">Apply filters</button><button class="menu-item" type="button" onclick="resetAttendanceFilters()">Reset</button></div>
@@ -280,7 +278,7 @@
                         <table id="attendanceTable">
                             <thead>
                                 <tr>
-                                    <th scope="col">Student ID</th><th scope="col">Student Name</th><th scope="col">Date</th><th scope="col">Subject</th><th scope="col">Time In</th><th scope="col">Time Out</th><th scope="col">Status</th>
+                                    <th scope="col">Student ID</th><th scope="col">Student Name</th><th scope="col">Date</th><th scope="col">Time In</th><th scope="col">Time Out</th><th scope="col">Status</th>
                                     <th scope="col">Action</th>
                                 </tr>
                             </thead>
@@ -289,7 +287,6 @@
                                     <td>2026-001</td>
                                     <td>John Cruz</td>
                                     <td>August 22, 2026</td>
-                                    <td>Programming 1</td>
                                     <td>7:58 AM</td>
                                     <td>10:00 AM</td>
                                     <td class="present">Present</td>
@@ -299,7 +296,6 @@
                                     <td>2026-002</td>
                                     <td>Maria Santos</td>
                                     <td>August 22, 2026</td>
-                                    <td>Database</td>
                                     <td>8:15 AM</td>
                                     <td>10:05 AM</td>
                                     <td class="late">Late</td>
@@ -309,7 +305,6 @@
                                     <td>2026-003</td>
                                     <td>Peter Ramos</td>
                                     <td>August 22, 2026</td>
-                                    <td>Networking</td>
                                     <td>--</td>
                                     <td>--</td>
                                     <td class="absent">Absent</td>
@@ -538,61 +533,6 @@
 
                 </section>
 
-                <section id="scheduleView" class="view-section" hidden>
-                    <div class="title">
-                        <h1>Class Schedule</h1>
-                        <div class="view-toolbar" aria-label="Schedule tools">
-                            <details class="toolbar-menu">
-                                <summary class="tool-btn"><span aria-hidden="true">⚙</span> Filter</summary>
-                                <div class="tool-popover filter-popover">
-                                    <label>Day <select id="scheduleDayFilter"><option value="">All days</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option></select></label>
-                                    <label>Instructor <input type="search" id="scheduleInstructorFilter" placeholder="All instructors"></label>
-                                    <label>Subject <input type="search" id="scheduleSubjectFilter" placeholder="All subjects"></label>
-                                    <label>Room <input type="search" id="scheduleRoomFilter" placeholder="All rooms"></label>
-                                    <button class="menu-item" type="button" onclick="resetScheduleFilters()">Reset filters</button>
-                                </div>
-                            </details>
-                            <details class="toolbar-menu">
-                                <summary class="tool-btn"><span aria-hidden="true">•••</span> More</summary>
-                                <div class="tool-popover"><button class="menu-item" type="button" onclick="resetScheduleFilters()">Reset view</button><button class="menu-item" type="button" onclick="refreshDashboard()">Refresh data</button></div>
-                            </details>
-                            <div class="toolbar-actions">
-                                <button class="add-btn archive-school-year-btn" type="button" data-admin-only="true" onclick="openArchiveSchoolYearModal()">Archive</button>
-                                <button class="add-btn toolbar-primary" type="button" data-admin-only="true" onclick="openModal()">+ Add Schedule</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <section class="table-container">
-                        <table id="scheduleTable">
-                            <thead>
-                                <tr>
-                                    <th scope="col">School Year</th>
-                                    <th scope="col">Subject</th>
-                                    <th scope="col">Instructor</th>
-                                    <th scope="col">Room</th>
-                                    <th scope="col">Day</th>
-                                    <th scope="col">Time</th>
-                                    <th scope="col">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="scheduleTableBody">
-                                <tr>
-                                    <td>2026-2027</td>
-                                    <td>Programming 1</td>
-                                    <td>Prof. Santos</td>
-                                    <td>Lab 1</td>
-                                    <td>Monday</td>
-                                    <td>8:00 - 10:00</td>
-                                    <td>
-                                        <details class="row-menu"><summary aria-label="Schedule actions">•••</summary><div class="row-menu__content"><button class="menu-item edit-btn" type="button" onclick="editRow(this)">Edit</button><button class="menu-item delete-btn" type="button" onclick="openDeleteModal(this)">Delete</button></div></details>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </section>
-                </section>
-
                 <div class="modal" id="operationExitModal" aria-hidden="true">
                     <div class="modal-content confirm-modal-content">
                         <h2>Stop Operation Mode?</h2>
@@ -819,43 +759,6 @@
             </div>
         </div>
 
-        <div class="modal" id="modal" aria-hidden="true">
-            <div class="modal-content">
-                <div class="modal-heading-row"><h2 id="modalTitle">Add Schedule</h2><button class="modal-icon-close" type="button" aria-label="Close schedule form" onclick="closeModal()">×</button></div>
-                <input type="text" id="subject" placeholder="Subject">
-                <input type="text" id="teacher" placeholder="Instructor">
-                <input type="text" id="room" placeholder="Room">
-                <input type="text" id="scheduleSchoolYear" placeholder="School year (e.g. 2026-2027)" inputmode="numeric" required>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="day">Day</label>
-                        <select id="day" aria-label="Select a day">
-                            <option value="">Select Day</option>
-                            <option value="Monday">Monday</option>
-                            <option value="Tuesday">Tuesday</option>
-                            <option value="Wednesday">Wednesday</option>
-                            <option value="Thursday">Thursday</option>
-                            <option value="Friday">Friday</option>
-                            <option value="Saturday">Saturday</option>
-                            <option value="Sunday">Sunday</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="startTime">Start Time</label>
-                        <input type="time" id="startTime">
-                    </div>
-                    <div class="form-group">
-                        <label for="endTime">End Time</label>
-                        <input type="time" id="endTime">
-                    </div>
-                </div>
-                <button class="save-btn" id="saveScheduleBtn" type="button" onclick="addSchedule()">Save Schedule</button>
-                <button class="close-btn" type="button" onclick="closeModal()">Cancel</button>
-            </div>
-        </div>
-
         <div class="modal" id="studentModal" aria-hidden="true">
             <div class="modal-content">
                 <div class="modal-heading-row"><h2>Add Student</h2><button class="modal-icon-close" type="button" aria-label="Close student form" onclick="closeStudentModal()">×</button></div>
@@ -961,7 +864,7 @@
 
         <div class="modal" id="deleteConfirmModal" aria-hidden="true">
             <div class="modal-content confirm-modal-content">
-                <h2>Delete Schedule?</h2>
+                <h2>Delete record?</h2>
                 <p>This action cannot be undone.</p>
                 <div class="confirm-actions">
                     <button class="save-btn" type="button" onclick="confirmDelete()">Yes, Delete</button>
