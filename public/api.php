@@ -677,15 +677,31 @@ if ($method === 'POST' && $action === 'delete-student') {
     $statement->execute([$studentId]);
     $student = $statement->fetch();
 
-    if ($student && $student['face_image_path']) {
+    if ($student && ! empty($student['face_image_path'])) {
         foreach (explode(',', (string) $student['face_image_path']) as $path) {
             $path = trim($path);
+            $path = ltrim($path, '/\\\\');
             if ($path === '') {
                 continue;
             }
             $imagePath = __DIR__.DIRECTORY_SEPARATOR.$path;
-            if (file_exists($imagePath)) {
+            if (is_file($imagePath)) {
                 @unlink($imagePath);
+            }
+        }
+    }
+
+    // Also clean up any orphaned face images matching this student's ID hash.
+    $imageDirectory = __DIR__.DIRECTORY_SEPARATOR.'face_images';
+    if (is_dir($imageDirectory)) {
+        foreach (glob($imageDirectory.DIRECTORY_SEPARATOR.'*') as $file) {
+            // Image filenames are sha256(studentId_index).ext — check by re-hashing.
+            $basename = pathinfo($file, PATHINFO_FILENAME);
+            for ($i = 0; $i < 10; $i++) {
+                if (hash('sha256', $studentId.'_'.$i) === $basename) {
+                    @unlink($file);
+                    break;
+                }
             }
         }
     }

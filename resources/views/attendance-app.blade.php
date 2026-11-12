@@ -654,6 +654,7 @@
 
                  <section id="studentRegistrationView" class="view-section" hidden>
                      <div class="title">
+                         <p class="section-eyebrow">01 — Enrollment</p>
                          <h1>Student Registration</h1>
                          <p>Register a student and capture face images from multiple angles.</p>
                      </div>
@@ -724,20 +725,22 @@
 
                          <div class="registration-capture">
                              <div class="camera-preview">
-                                 <img id="registrationVideo" alt="camera preview">
+                                 <video id="registrationVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;display:block;"></video>
                                  <canvas id="registrationCanvas" hidden></canvas>
                                  <div class="face-oval-guide" aria-hidden="true"></div>
                              </div>
                              <div class="capture-actions">
-                                 <span id="registrationPoseStatus" class="setup-status">Pose: none</span>
                                  <button class="tool-btn" type="button" onclick="startRegistrationCamera()">Start Camera</button>
                                  <button class="tool-btn" type="button" onclick="stopRegistrationCamera()">Stop Camera</button>
+                             </div>
+                             <div class="capture-actions">
                                  <button class="tool-btn" type="button" onclick="captureRegistrationAngle('front')">Capture Front</button>
                                  <button class="tool-btn" type="button" onclick="captureRegistrationAngle('down')">Look Down</button>
                                  <button class="tool-btn" type="button" onclick="captureRegistrationAngle('right')">Look Right</button>
                                  <button class="tool-btn" type="button" onclick="captureRegistrationAngle('left')">Look Left</button>
                                  <button class="tool-btn" type="button" onclick="captureRegistrationAngle('up')">Look Up</button>
                              </div>
+                             <span id="registrationPoseStatus" class="setup-status" style="display:block;margin-bottom:12px;">Camera not started</span>
                              <div id="registrationLoading" class="registration-loading" hidden>
                                  <span class="spinner"></span> Registering student...
                              </div>

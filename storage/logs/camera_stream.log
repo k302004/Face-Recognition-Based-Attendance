@@ -1,3 +1,0 @@
-[faces] face_recognition is not installed; streaming without recognition
-Streaming camera index 0 on http://127.0.0.1:8090/video_feed (720x960)
-[faces] recognition disabled (face_recognition not installed)

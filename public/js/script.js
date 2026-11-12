@@ -1775,74 +1775,59 @@ let registrationCurrentPose = 'none';
 let registrationAutoCaptureEnabled = true;
 const REGISTRATION_ANGLES = ['front', 'down', 'right', 'left', 'up'];
 
+let registrationStream = null;
 function startRegistrationCamera() {
-    const img = document.getElementById('registrationVideo');
-    if (!img) return;
-    requestApi('camera-stream-start', { method: 'POST', body: JSON.stringify({ width: 720, height: 960 }) })
-        .then(function () {
-            img.onload = function () { img.onload = null; };
-            img.src = 'api.php?action=camera-feed&ts=' + Date.now();
-            if (registrationPoseTimer) clearInterval(registrationPoseTimer);
-            registrationPoseTimer = setInterval(pollRegistrationPose, 400);
+    const video = document.getElementById('registrationVideo');
+    if (!video) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Browser camera is not supported in this browser.');
+        return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 960 } } })
+        .then(function (stream) {
+            registrationStream = stream;
+            video.srcObject = stream;
+            video.play();
+            const statusEl = document.getElementById('registrationPoseStatus');
+            if (statusEl) statusEl.textContent = 'Camera ready — capture each angle manually';
         })
         .catch(function (error) {
-            const details = error.details ? ' ' + error.details : '';
-            alert('Unable to start the camera: ' + (error.message || error) + details);
+            alert('Unable to access the camera: ' + (error.message || error));
         });
 }
 
 function stopRegistrationCamera() {
-    const img = document.getElementById('registrationVideo');
-    if (img) img.src = '';
-    if (registrationPoseTimer) {
-        clearInterval(registrationPoseTimer);
-        registrationPoseTimer = null;
+    const video = document.getElementById('registrationVideo');
+    if (registrationStream) {
+        registrationStream.getTracks().forEach(function (track) { track.stop(); });
+        registrationStream = null;
     }
+    if (video) video.srcObject = null;
     registrationCurrentPose = 'none';
     const statusEl = document.getElementById('registrationPoseStatus');
     if (statusEl) statusEl.textContent = 'Pose: none';
 }
 
 function pollRegistrationPose() {
-    requestApi('camera-pose', { method: 'GET' })
-        .then(function (data) {
-            const pose = (data && data.pose) ? data.pose : 'none';
-            registrationCurrentPose = pose;
-            const statusEl = document.getElementById('registrationPoseStatus');
-            if (statusEl) statusEl.textContent = 'Pose: ' + pose;
-            // Auto-capture when the detected pose matches the next required angle.
-            if (!registrationAutoCaptureEnabled) return;
-            const nextAngle = REGISTRATION_ANGLES.find(function (a) { return !registrationCaptures[a]; });
-            if (!nextAngle) return;
-            if (pose !== nextAngle) return;
-            // Small stability delay: capture only if pose persists.
-            if (pollRegistrationPose._stablePose === pose) {
-                if (Date.now() - (pollRegistrationPose._stableSince || 0) > 700) {
-                    captureRegistrationFrame(nextAngle);
-                    pollRegistrationPose._stablePose = null;
-                }
-            } else {
-                pollRegistrationPose._stablePose = pose;
-                pollRegistrationPose._stableSince = Date.now();
-            }
-        })
-        .catch(function () { /* ignore */ });
+    // Browser camera has no pose detection; just keep status updated.
+    const statusEl = document.getElementById('registrationPoseStatus');
+    if (statusEl) statusEl.textContent = 'Camera ready — capture each angle manually';
 }
 
 function captureRegistrationFrame(angle) {
-    const img = document.getElementById('registrationVideo');
+    const video = document.getElementById('registrationVideo');
     const canvas = document.getElementById('registrationCanvas');
-    if (!img || !canvas) return;
-    if (!img.naturalWidth || !img.naturalHeight) {
+    if (!video || !canvas) return;
+    if (!video.videoWidth || !video.videoHeight) {
         // Retry shortly after the frame loads.
         setTimeout(function () { captureRegistrationFrame(angle); }, 200);
         return;
     }
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     try {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     } catch (e) {
         alert('Unable to capture frame: ' + (e.message || e));
         return;
