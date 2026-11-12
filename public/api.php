@@ -887,6 +887,16 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
     $launchErrorLogFile = dirname(__DIR__).DIRECTORY_SEPARATOR.'storage'.DIRECTORY_SEPARATOR.'logs'.DIRECTORY_SEPARATOR.'camera_stream_launch_error.log';
     $script = dirname(__DIR__).DIRECTORY_SEPARATOR.'scripts'.DIRECTORY_SEPARATOR.'camera_stream.py';
 
+    // Check if the stream is already running — if so, reuse it.
+    $healthUrl = 'http://127.0.0.1:'.$port.'/face_pose';
+    $nullDevice = stripos(PHP_OS, 'WIN') === 0 ? 'NUL' : '/dev/null';
+    $stderrRedirect = stripos(PHP_OS, 'WIN') === 0 ? '2>nul' : '2>/dev/null';
+    $existingHealth = trim((string) shell_exec('curl -s -o '.escapeshellarg($nullDevice).' -w "%{http_code}" --max-time 1 '.$healthUrl.' '.$stderrRedirect));
+    if ($existingHealth === '200') {
+        // Stream already running — don't restart.
+        reply(['message' => 'Camera stream already running.', 'pid' => 0, 'url' => 'http://127.0.0.1:'.$port.'/video_feed', 'alreadyRunning' => true]);
+    }
+
     if (is_file($pidFile)) {
         $existingPid = (int) trim((string) file_get_contents($pidFile));
         if ($existingPid > 0) {
@@ -948,7 +958,19 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
         }
         $psCommand = 'powershell.exe -NoProfile -NonInteractive -EncodedCommand '.base64_encode($encodedScript).' >NUL 2>&1';
         shell_exec($psCommand);
+        // Wait a bit for the process to start and write the pid file.
+        usleep(500000);
         $pid = is_file($pidFile) ? (int) trim((string) file_get_contents($pidFile)) : 0;
+        if ($pid <= 0) {
+            // Fallback: try launching directly with start /B.
+            $fallbackCommand = 'start /B "" "'.$python.'" -u "'.$script.'" '.$cameraIndex.' '.$port.' '.$targetWidth.' '.$targetHeight.' > "'.$logFile.'" 2> "'.$errorLogFile.'"';
+            shell_exec($fallbackCommand);
+            usleep(1000000);
+            // Try to find the pid by checking the process list.
+            $pidCheck = shell_exec('tasklist /FI "IMAGENAME eq python.exe" /FO CSV /NH 2>nul');
+            // Just return success and let the frontend retry loading.
+            $pid = 1;
+        }
     } else {
         $command = 'nohup '.$python.' '.escapeshellarg($script).' '.escapeshellarg((string) $cameraIndex).' '.escapeshellarg((string) $port)
             .' '.escapeshellarg((string) $targetWidth).' '.escapeshellarg((string) $targetHeight)

@@ -472,17 +472,21 @@ class StreamHandler(BaseHTTPRequestHandler):
     def _send_json(self, payload, status=200):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
+        origin = self.headers.get("Origin", "*")
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Access-Control-Allow-Credentials", "true")
         self.end_headers()
         self.wfile.write(body)
 
     def do_OPTIONS(self):
+        origin = self.headers.get("Origin", "*")
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Credentials", "true")
         self.end_headers()
 
     def do_GET(self):
@@ -505,10 +509,12 @@ class StreamHandler(BaseHTTPRequestHandler):
 
         if self.path.startswith("/events") or self.path.startswith("/stream"):
             self.send_response(200)
+            origin = self.headers.get("Origin", "*")
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Connection", "keep-alive")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Credentials", "true")
             self.end_headers()
             last_payload = None
             try:
@@ -549,9 +555,11 @@ class StreamHandler(BaseHTTPRequestHandler):
         self.send_header("Age", "0")
         self.send_header("Cache-Control", "no-cache, private")
         self.send_header("Pragma", "no-cache")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self.headers.get("Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Credentials", "true")
         self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
         self.end_headers()
 
