@@ -604,11 +604,25 @@
                     </div>
                 </div>
 
+                <div class="modal" id="operationModeChoiceModal" aria-hidden="true">
+                    <div class="modal-content confirm-modal-content">
+                        <h2>Operation Mode</h2>
+                        <p class="profile-note">Choose the attendance action for this session.</p>
+                        <div class="setup-actions" style="justify-content:center; gap:12px;">
+                            <button class="save-btn" type="button" id="operationTimeInBtn" style="min-width:120px;">Time In</button>
+                            <button class="save-btn" type="button" id="operationTimeOutBtn" style="min-width:120px; background:#dc2626;">Time Out</button>
+                        </div>
+                        <div class="setup-actions" style="justify-content:center; margin-top:12px;">
+                            <button class="close-btn" type="button" id="operationChoiceCancel">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
                 <section id="operationModeView" class="view-section" hidden>
                     <div class="title">
                         <div>
-                            <h1>Operation Mode</h1>
-                            <p>Live camera feed and student profile preview.</p>
+                            <h1 id="operationModeTitle">Operation Mode</h1>
+                            <p id="operationModeSubtitle">Live camera feed and student profile preview.</p>
                         </div>
                         <button class="back-link" type="button" onclick="closeOperationMode()">← Back</button>
                     </div>

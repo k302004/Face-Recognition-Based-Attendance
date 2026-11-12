@@ -322,6 +322,7 @@ if ($method === 'POST' && $action === 'record-attendance') {
     requireLogin();
     $studentId = trim((string) ($payload['studentId'] ?? ''));
     $subject = trim((string) ($payload['subject'] ?? ''));
+    $attendanceAction = trim((string) ($payload['attendanceAction'] ?? 'time_in'));
     markCompletedSchedulesAbsent($db);
     if ($subject === '') {
         // Use today's first active schedule, or a default.
@@ -346,7 +347,10 @@ if ($method === 'POST' && $action === 'record-attendance') {
     $duplicateStatement = $db->prepare('SELECT id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject = ? LIMIT 1');
     $duplicateStatement->execute([$studentId, $attendanceDate, $subject]);
     $existingAttendance = $duplicateStatement->fetch();
-    if ($existingAttendance) {
+    if ($attendanceAction === 'time_out') {
+        if (! $existingAttendance) {
+            reply(['message' => 'No time in record found for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'no_time_in']);
+        }
         $timeOut = date('g:i A');
         $update = $db->prepare("UPDATE attendance SET time_out = ? WHERE id = ? AND (time_out = '--' OR time_out = '')");
         $update->execute([$timeOut, $existingAttendance['id']]);
@@ -354,7 +358,11 @@ if ($method === 'POST' && $action === 'record-attendance') {
             reply(['message' => 'Time out already recorded for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
         }
         audit($db, 'Recorded time out for '.$studentId);
-        reply(['message' => 'Time out recorded.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'parentPhone' => $student['parent_phone'], 'date' => $attendanceDate, 'timeOut' => $timeOut, 'action' => 'time_out']);
+        reply(['message' => 'Time out recorded.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'parentPhone' => $student['parent_phone'], 'date' => $attendanceDate, 'timeOut' => $timeOut, 'subject' => $subject, 'status' => $status, 'action' => 'time_out']);
+    }
+    // time_in mode
+    if ($existingAttendance) {
+        reply(['message' => 'Time in already recorded for this student and subject today.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'action' => 'already_recorded']);
     }
     $statement = $db->prepare('INSERT INTO attendance (student_id, student_name, course, attendance_date, subject, time_in, time_out, status, school_year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $statement->execute([$student['student_id'], $student['full_name'], $student['course'], $attendanceDate, $subject, $timeIn, $timeOut, $status, $student['school_year']]);

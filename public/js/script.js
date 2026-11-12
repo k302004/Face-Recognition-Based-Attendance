@@ -105,6 +105,39 @@ function escapeHtml(value) {
     });
 }
 
+function showOperationChoiceModal() {
+    return new Promise(function (resolve) {
+        const modal = document.getElementById('operationModeChoiceModal');
+        if (!modal) {
+            resolve('time_in');
+            return;
+        }
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+
+        const timeInBtn = document.getElementById('operationTimeInBtn');
+        const timeOutBtn = document.getElementById('operationTimeOutBtn');
+        const cancelBtn = document.getElementById('operationChoiceCancel');
+
+        function cleanup(result) {
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+            if (timeInBtn) timeInBtn.removeEventListener('click', onTimeIn);
+            if (timeOutBtn) timeOutBtn.removeEventListener('click', onTimeOut);
+            if (cancelBtn) cancelBtn.removeEventListener('click', onCancel);
+            resolve(result);
+        }
+
+        function onTimeIn() { cleanup('time_in'); }
+        function onTimeOut() { cleanup('time_out'); }
+        function onCancel() { cleanup(null); }
+
+        if (timeInBtn) timeInBtn.addEventListener('click', onTimeIn);
+        if (timeOutBtn) timeOutBtn.addEventListener('click', onTimeOut);
+        if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
+    });
+}
+
 function showOperationExitModal() {
     return new Promise(function (resolve) {
         const modal = document.getElementById('operationExitModal');
@@ -232,6 +265,15 @@ async function openOperationMode() {
     if (!configured) {
         return;
     }
+    const choice = await showOperationChoiceModal();
+    if (!choice) {
+        return;
+    }
+    operationAttendanceAction = choice;
+    const titleEl = document.getElementById('operationModeTitle');
+    const subtitleEl = document.getElementById('operationModeSubtitle');
+    if (titleEl) titleEl.textContent = 'Operation Mode — ' + (choice === 'time_in' ? 'Time In' : 'Time Out');
+    if (subtitleEl) subtitleEl.textContent = choice === 'time_in' ? 'Recording time in for detected students.' : 'Recording time out for detected students.';
     document.querySelectorAll('.view-section').forEach(function (section) {
         section.hidden = true;
     });
@@ -353,13 +395,17 @@ async function openOperationMode() {
                         method: 'POST',
                         credentials: 'same-origin',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ studentId: info.student_id })
+                        body: JSON.stringify({ studentId: info.student_id, attendanceAction: operationAttendanceAction })
                     }).then(function (r) { return r.json(); }).then(function (result) {
-                        if (result && result.action === 'time_in') {
+                        if (result && (result.action === 'time_in' || result.action === 'time_out')) {
                             // Show a brief confirmation.
                             var confirmEl = document.createElement('div');
                             confirmEl.className = 'student-detail-row';
-                            confirmEl.innerHTML = '<span class="student-detail-value" style="color:#22c55e;">✓ Attendance recorded: ' + escapeHtml(result.status || 'Present') + ' at ' + escapeHtml(result.timeIn || '') + '</span>';
+                            var color = result.action === 'time_in' ? '#22c55e' : '#3b82f6';
+                            var text = result.action === 'time_in'
+                                ? '✓ Time In recorded: ' + escapeHtml(result.status || 'Present') + ' at ' + escapeHtml(result.timeIn || '')
+                                : '✓ Time Out recorded at ' + escapeHtml(result.timeOut || '');
+                            confirmEl.innerHTML = '<span class="student-detail-value" style="color:' + color + ';">' + text + '</span>';
                             faceInfo.querySelector('.student-details').appendChild(confirmEl);
                         }
                     }).catch(function () { /* ignore */ });
@@ -1770,6 +1816,7 @@ function initializeGlobalSearch() {
 }
 
 let registrationCaptures = {};
+let operationAttendanceAction = 'time_in';
 let registrationPoseTimer = null;
 let registrationCurrentPose = 'none';
 let registrationAutoCaptureEnabled = true;
