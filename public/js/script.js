@@ -2014,6 +2014,12 @@ async function startCameraStream(img, placeholder, feedContainer, force) {
                 if (_retryCount < 10) {
                     _retryCount++;
                     setTimeout(_loadFeed, 1000);
+                } else {
+                    if (place) {
+                        place.style.display = 'flex';
+                        place.textContent = 'Camera feed unavailable. Start the Python stream manually: python scripts/camera_stream.py';
+                    }
+                    image.style.display = 'none';
                 }
             };
             _loadFeed();

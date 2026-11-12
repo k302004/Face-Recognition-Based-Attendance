@@ -739,7 +739,7 @@
 
                          <div class="registration-capture">
                              <div class="camera-preview">
-                                 <video id="registrationVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;display:block;"></video>
+                                 <video id="registrationVideo" autoplay playsinline muted crossorigin="anonymous" style="width:100%;height:100%;object-fit:cover;display:block;"></video>
                                  <canvas id="registrationCanvas" hidden></canvas>
                                  <div class="face-oval-guide" aria-hidden="true"></div>
                              </div>
