@@ -283,6 +283,7 @@ async function openOperationMode() {
         item.classList.remove('active');
     });
 
+    // Use full app space (hide header/nav) but not browser fullscreen.
     document.body.classList.add('operation-mode-active');
 
     // Validate before stopping operation mode via Escape.
@@ -319,13 +320,6 @@ async function openOperationMode() {
     document.addEventListener('webkitfullscreenchange', operationFullscreenHandler);
     document.addEventListener('mozfullscreenchange', operationFullscreenHandler);
     document.addEventListener('MSFullscreenChange', operationFullscreenHandler);
-
-    // Force the browser into fullscreen mode for operation mode.
-    const fullscreenTarget = document.documentElement;
-    const requestFs = fullscreenTarget.requestFullscreen || fullscreenTarget.webkitRequestFullscreen || fullscreenTarget.mozRequestFullScreen || fullscreenTarget.msRequestFullscreen;
-    if (requestFs) {
-        try { requestFs.call(fullscreenTarget); } catch (error) { /* ignore */ }
-    }
 
     const img = document.getElementById('cameraFeedImg');
     const placeholder = document.querySelector('.camera-feed__placeholder');
@@ -391,32 +385,46 @@ async function openOperationMode() {
                 // Auto-record attendance when a face is detected (once per student per session).
                 if (info && info.student_id && !_recordedAttendance[info.student_id]) {
                     _recordedAttendance[info.student_id] = true;
-                    fetch('api.php?action=record-attendance', {
+                    fetch('/api/record-attendance', {
                         method: 'POST',
                         credentials: 'same-origin',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') || {}).getAttribute?.('content') || '' },
                         body: JSON.stringify({ studentId: info.student_id, attendanceAction: operationAttendanceAction })
                     }).then(function (r) { return r.json(); }).then(function (result) {
-                        if (result && (result.action === 'time_in' || result.action === 'time_out')) {
+                        if (result && result.action) {
                             // Show a brief confirmation.
                             var confirmEl = document.createElement('div');
                             confirmEl.className = 'student-detail-row';
-                            var color = result.action === 'time_in' ? '#22c55e' : '#3b82f6';
-                            var text = result.action === 'time_in'
-                                ? '✓ Time In recorded: ' + escapeHtml(result.status || 'Present') + ' at ' + escapeHtml(result.timeIn || '')
-                                : '✓ Time Out recorded at ' + escapeHtml(result.timeOut || '');
-                            confirmEl.innerHTML = '<span class="student-detail-value" style="color:' + color + ';">' + text + '</span>';
-                            faceInfo.querySelector('.student-details').appendChild(confirmEl);
-                            refreshAttendanceRecords().catch(function (error) {
-                                console.error('Attendance was recorded, but the attendance list could not be refreshed.', error);
-                            });
+                            var color = '#6b7280';
+                            var text = '';
+                            var overlayClass = '';
+                            if (result.action === 'time_in') { color = '#22c55e'; text = '✓ Time In recorded: ' + escapeHtml(result.status || 'Present') + ' at ' + escapeHtml(result.timeIn || ''); overlayClass = 'time-in'; }
+                            else if (result.action === 'time_out') { color = '#3b82f6'; text = '✓ Time Out recorded at ' + escapeHtml(result.timeOut || ''); overlayClass = 'time-out'; }
+                            else if (result.action === 'already_recorded') { color = '#f59e0b'; text = '⚠ Already recorded — Time In: ' + escapeHtml(result.timeIn || '--') + (result.timeOut && result.timeOut !== '--' ? ', Time Out: ' + escapeHtml(result.timeOut) : ''); overlayClass = 'already'; }
+                            else if (result.action === 'no_time_in') { color = '#ef4444'; text = '✗ No time in record found'; overlayClass = 'error'; }
+                            if (text) {
+                                confirmEl.innerHTML = '<span class="student-detail-value" style="color:' + color + ';">' + text + '</span>';
+                                faceInfo.querySelector('.student-details').appendChild(confirmEl);
+                                // Show horizontal overlay below camera feed.
+                                var overlay = document.getElementById('attendanceOverlay');
+                                if (overlay) {
+                                    overlay.className = 'attendance-overlay ' + overlayClass;
+                                    overlay.textContent = text.replace(/^[✓⚠✗]\s*/, '');
+                                    overlay.style.display = 'block';
+                                }
+                                refreshAttendanceRecords().catch(function (error) {
+                                    console.error('Attendance was recorded, but the attendance list could not be refreshed.', error);
+                                });
+                            }
                         }
-                    }).catch(function () { /* ignore */ });
+                    }).catch(function (err) { console.error('Attendance recording failed:', err); });
                 }
             } else if (faceDetected) {
                 faceInfo.innerHTML = '<div class="student-details"><div class="student-detail-row"><span class="student-detail-value">Face detected. (Recognition unavailable on this machine)</span></div></div>';
             } else {
                 faceInfo.innerHTML = '<div class="student-details"><div class="student-detail-row"><span class="student-detail-value">No face detected yet.</span></div></div>';
+                var overlay = document.getElementById('attendanceOverlay');
+                if (overlay) overlay.style.display = 'none';
             }
         }
         const profileImage = document.getElementById('profileImage');
@@ -514,6 +522,21 @@ async function openOperationMode() {
     }
 }
 
+function toggleOperationFullscreen() {
+    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+    if (isFs) {
+        const exitFs = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+        if (exitFs) {
+            try { exitFs.call(document); } catch (error) { /* ignore */ }
+        }
+    } else {
+        const requestFs = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen || document.documentElement.mozRequestFullScreen || document.documentElement.msRequestFullscreen;
+        if (requestFs) {
+            try { requestFs.call(document.documentElement); } catch (error) { /* ignore */ }
+        }
+    }
+}
+
 async function closeOperationMode() {
     document.body.classList.remove('operation-mode-active');
     if (operationEscapeHandler) {
@@ -596,7 +619,7 @@ function updateAdminIdentity() {
 }
 
 async function loadDashboardData() {
-    dashboardData = await requestApi('dashboard');
+    dashboardData = await requestApi('/api/dashboard');
     const studentsBody = document.querySelector('#studentTable tbody');
     if (studentsBody) {
         const sortedStudents = dashboardData.students.slice().sort(function (firstStudent, secondStudent) {
@@ -638,7 +661,7 @@ function renderAttendanceTable() {
 }
 
 async function refreshAttendanceRecords() {
-    const data = await requestApi('dashboard', { method: 'GET' });
+    const data = await requestApi('/api/dashboard', { method: 'GET' });
     dashboardData.attendance = data.attendance;
     attendanceState.selectedDate = attendanceDateKey(new Date());
     renderAttendanceTable();
@@ -698,11 +721,16 @@ function showResetForm() {
 }
 
 async function requestApi(action, options) {
-    const response = await fetch(`api.php?action=${action}`, {
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        ...options
-    });
+    options = options || {};
+    const url = String(action).startsWith('/') ? action : `api.php?action=${action}`;
+    const method = String((options.method || 'GET')).toUpperCase();
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
+    if (method !== 'GET') {
+        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        if (csrfMeta) headers['X-CSRF-TOKEN'] = csrfMeta.getAttribute('content');
+    }
+    const fetchOptions = Object.assign({}, options, { credentials: 'same-origin', headers: headers });
+    const response = await fetch(url, fetchOptions);
     const rawText = await response.text();
     let data = {};
     if (rawText) {
@@ -738,7 +766,7 @@ async function initializeAuth() {
 
     showAuth();
     try {
-        const data = await requestApi('me');
+        const data = await requestApi('/api/me');
         await showApp(data.user);
     } catch (error) {
         // No active session keeps the login form visible.
@@ -760,7 +788,7 @@ async function initializeAuth() {
         }
 
         try {
-            const data = await requestApi('login', { method: 'POST', body: JSON.stringify({ email, password }) });
+            const data = await requestApi('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
             await showApp(data.user);
         } catch (error) {
             setAuthMessage(error.message, 'error');
@@ -774,7 +802,7 @@ async function initializeAuth() {
         const email = document.getElementById('signupEmail').value.trim().toLowerCase();
         const password = document.getElementById('signupPassword').value;
         try {
-            const data = await requestApi('signup', { method: 'POST', body: JSON.stringify({ name, email, password }) });
+            const data = await requestApi('/api/signup', { method: 'POST', body: JSON.stringify({ name, email, password }) });
             localStorage.setItem(REMEMBER_KEY, JSON.stringify({ email: email, password: password }));
             await showApp(data.user);
         } catch (error) {
@@ -794,7 +822,7 @@ async function initializeAuth() {
         submitButton.textContent = verificationFields.hidden ? 'Sending...' : 'Updating...';
         try {
             if (verificationFields.hidden) {
-                await requestApi('request-password-reset', { method: 'POST', body: JSON.stringify({ email }) });
+                await requestApi('/api/request-password-reset', { method: 'POST', body: JSON.stringify({ email }) });
                 verificationFields.hidden = false;
                 document.getElementById('resetCode').required = true;
                 document.getElementById('resetNewPassword').required = true;
@@ -806,7 +834,7 @@ async function initializeAuth() {
             const newPassword = document.getElementById('resetNewPassword').value;
             if (newPassword !== document.getElementById('resetConfirmPassword').value) throw new Error('The passwords do not match.');
             const code = document.getElementById('resetCode').value.trim();
-            const data = await requestApi('reset-password', { method: 'POST', body: JSON.stringify({ email, code, newPassword }) });
+            const data = await requestApi('/api/reset-password', { method: 'POST', body: JSON.stringify({ email, code, newPassword }) });
             document.getElementById('resetForm').reset();
             switchAuthMode('login');
             setAuthMessage(data.message);
@@ -820,7 +848,7 @@ async function initializeAuth() {
 
     document.getElementById('logoutLink').addEventListener('click', function (event) {
         event.preventDefault();
-        requestApi('logout', { method: 'POST' }).finally(function () {
+        requestApi('/api/logout', { method: 'POST' }).finally(function () {
             showAuth();
             switchAuthMode('login');
             document.getElementById('loginForm').reset();
@@ -1124,7 +1152,7 @@ async function confirmAttendanceArchive() {
     }
     if (!shouldConfirmArchive()) return;
     try {
-        await requestApi('archive-attendance-date', { method: 'POST', body: JSON.stringify({ date: attendanceState.selectedDate, schoolYear: `${startYear}-${endYear}` }) });
+        await requestApi('/api/archive-attendance-date', { method: 'POST', body: JSON.stringify({ date: attendanceState.selectedDate, schoolYear: `${startYear}-${endYear}` }) });
         closeAttendanceArchiveModal();
         await loadDashboardData();
     } catch (error) {
@@ -1329,7 +1357,7 @@ async function toggleStudentArchive(button) {
     const row = button.closest('tr');
     const archived = row.dataset.studentStatus === 'archived';
     try {
-        await requestApi('archive-student', { method: 'POST', body: JSON.stringify({ studentId: row.cells[0].textContent.trim(), archived: archived ? 0 : 1 }) });
+        await requestApi('/api/archive-student', { method: 'POST', body: JSON.stringify({ studentId: row.cells[0].textContent.trim(), archived: archived ? 0 : 1 }) });
         await loadDashboardData();
     } catch (error) {
         alert(error.message);
@@ -1391,7 +1419,7 @@ async function confirmArchiveSchoolYear() {
     const course = document.getElementById('archiveCourse').value;
     if (!shouldConfirmArchive()) return;
     try {
-        await requestApi('archive-year', { method: 'POST', body: JSON.stringify({ schoolYear: schoolYear, course: course }) });
+        await requestApi('/api/archive-year', { method: 'POST', body: JSON.stringify({ schoolYear: schoolYear, course: course }) });
         closeArchiveSchoolYearModal();
         await loadDashboardData();
     } catch (error) {
@@ -1579,7 +1607,7 @@ document.querySelectorAll('.archive-category-tab').forEach(function (tab) {
 async function restoreArchivedYear(button) {
     const schoolYear = button.closest('tr').dataset.archiveYear;
     try {
-        await requestApi('restore-year', { method: 'POST', body: JSON.stringify({ schoolYear: schoolYear }) });
+        await requestApi('/api/restore-year', { method: 'POST', body: JSON.stringify({ schoolYear: schoolYear }) });
         await loadDashboardData();
     } catch (error) {
         alert(error.message);
@@ -1593,7 +1621,7 @@ async function restoreSelectedSchoolYear() {
         return;
     }
     try {
-        await requestApi('restore-year', { method: 'POST', body: JSON.stringify({ schoolYear: schoolYear }) });
+        await requestApi('/api/restore-year', { method: 'POST', body: JSON.stringify({ schoolYear: schoolYear }) });
         await loadDashboardData();
     } catch (error) {
         alert(error.message);
@@ -1694,12 +1722,16 @@ function renderAuditLog() {
 
 async function saveNotificationSettings() {
     const settings = {
-        absent: document.getElementById('notifyAbsent').checked,
-        late: document.getElementById('notifyLate').checked,
-        checkIn: document.getElementById('notifyCheckIn').checked
+        absent: document.getElementById('notifyAbsent')?.checked ?? true,
+        late: document.getElementById('notifyLate')?.checked ?? true,
+        checkIn: document.getElementById('notifyCheckIn')?.checked ?? true,
+        sms_time_in_enabled: document.getElementById('smsTimeInEnabled')?.checked ?? false,
+        sms_time_out_enabled: document.getElementById('smsTimeOutEnabled')?.checked ?? false,
+        sms_time_in_message: document.getElementById('smsTimeInMessage')?.value ?? '',
+        sms_time_out_message: document.getElementById('smsTimeOutMessage')?.value ?? ''
     };
     try {
-        await requestApi('settings', { method: 'POST', body: JSON.stringify(settings) });
+        await requestApi('/api/settings', { method: 'POST', body: JSON.stringify(settings) });
         await loadDashboardData();
     } catch (error) {
         alert(error.message);
@@ -1709,9 +1741,13 @@ async function saveNotificationSettings() {
 function loadNotificationSettings() {
     const settings = dashboardData.notificationSettings;
     if (!settings) return;
-    if (document.getElementById('notifyAbsent')) document.getElementById('notifyAbsent').checked = settings.absent !== false;
-    if (document.getElementById('notifyLate')) document.getElementById('notifyLate').checked = settings.late !== false;
-    if (document.getElementById('notifyCheckIn')) document.getElementById('notifyCheckIn').checked = settings.checkIn !== false;
+    if (document.getElementById('notifyAbsent')) document.getElementById('notifyAbsent').checked = settings.absent !== 'false';
+    if (document.getElementById('notifyLate')) document.getElementById('notifyLate').checked = settings.late !== 'false';
+    if (document.getElementById('notifyCheckIn')) document.getElementById('notifyCheckIn').checked = settings.checkIn !== 'false';
+    if (document.getElementById('smsTimeInEnabled')) document.getElementById('smsTimeInEnabled').checked = settings.sms_time_in_enabled === 'true';
+    if (document.getElementById('smsTimeOutEnabled')) document.getElementById('smsTimeOutEnabled').checked = settings.sms_time_out_enabled === 'true';
+    if (document.getElementById('smsTimeInMessage')) document.getElementById('smsTimeInMessage').value = settings.sms_time_in_message || '';
+    if (document.getElementById('smsTimeOutMessage')) document.getElementById('smsTimeOutMessage').value = settings.sms_time_out_message || '';
 }
 
 function loadNotificationSettingsFromData() { loadNotificationSettings(); }
@@ -1741,7 +1777,7 @@ async function saveAdminProfile() {
     }
     try {
         const profileImage = file ? await readFacePhoto(file) : currentUser.profileImage || '';
-        const data = await requestApi('profile', { method: 'POST', body: JSON.stringify({ name, profileImage }) });
+        const data = await requestApi('/api/profile', { method: 'POST', body: JSON.stringify({ name, profileImage }) });
         currentUser = data.user;
         updateAdminIdentity();
         document.getElementById('profileMessage').textContent = 'Profile saved successfully.';
@@ -1761,7 +1797,7 @@ async function saveAdminSettings() {
         return;
     }
     try {
-        await requestApi('password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+        await requestApi('/api/password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
         document.getElementById('settingsMessage').textContent = 'Settings saved successfully.';
         setTimeout(closeSettings, 500);
     } catch (error) {
@@ -1788,7 +1824,7 @@ function resetSessionTimer() {
     if (sessionTimer) clearTimeout(sessionTimer);
     if (!settings.sessionTimeout || !currentUser) return;
     sessionTimer = setTimeout(function () {
-        requestApi('logout', { method: 'POST' }).finally(function () { currentUser = null; showAuth(); });
+        requestApi('/api/logout', { method: 'POST' }).finally(function () { currentUser = null; showAuth(); });
     }, settings.sessionTimeout * 60 * 1000);
 }
 
@@ -1957,7 +1993,7 @@ async function submitStudentRegistration() {
     if (loadingEl) loadingEl.hidden = false;
     try {
         const payload = { studentId, fullName, course, schoolYear, parentPhone, year, status, facePhotos: facePhotos };
-        await requestApi('student', { method: 'POST', body: JSON.stringify(payload) });
+        await requestApi('/api/student', { method: 'POST', body: JSON.stringify(payload) });
         alert('Student registered successfully.');
         registrationCaptures = {};
         const container = document.getElementById('registrationCaptures');
@@ -2484,6 +2520,9 @@ function openStudentModal(row) {
         }
         if (fields.year) fields.year.value = row.cells[3].textContent.trim();
         if (fields.status) fields.status.value = statusValue === 'Irregular' ? 'Irregular' : 'Regular';
+        const rowStudentId = row.cells[0].textContent.trim();
+        const storedStudent = (dashboardData.students || []).find(function (s) { return String(s.student_id) === String(rowStudentId); });
+        if (fields.parentPhone && storedStudent) fields.parentPhone.value = storedStudent.parent_phone || '';
     }
 
     modal.style.display = 'flex';
@@ -2522,7 +2561,7 @@ async function addStudent() {
         const payload = { studentId, fullName, course, schoolYear, parentPhone, year, status };
         if (editingStudentId) payload.id = editingStudentId;
         if (facePhoto) payload.facePhoto = await readFacePhoto(facePhoto);
-        await requestApi('student', { method: 'POST', body: JSON.stringify(payload) });
+        await requestApi('/api/student', { method: 'POST', body: JSON.stringify(payload) });
         closeStudentModal();
         clearStudentForm();
         await loadDashboardData();
@@ -2540,7 +2579,7 @@ async function deleteStudent(row) {
     }
     
     try {
-        await requestApi('delete-student', {
+        await requestApi('/api/delete-student', {
             method: 'POST',
             body: JSON.stringify({ studentId })
         });
@@ -2579,7 +2618,7 @@ async function addSchedule() {
                 }
             }
 
-            await requestApi('schedule', {
+            await requestApi('/api/schedule', {
                 method: 'POST',
                 body: JSON.stringify({
                     id: editingRow.dataset.scheduleId,
@@ -2601,7 +2640,7 @@ async function addSchedule() {
             }
 
             for (const selectedDay of selectedDays) {
-                await requestApi('schedule', {
+                await requestApi('/api/schedule', {
                     method: 'POST',
                     body: JSON.stringify({
                         subject,
@@ -2689,7 +2728,7 @@ function confirmDelete() {
     if (rowToDelete) {
         const scheduleId = rowToDelete.dataset.scheduleId;
         if (scheduleId) {
-            requestApi('delete-schedule', { method: 'POST', body: JSON.stringify({ id: scheduleId }) })
+            requestApi('/api/delete-schedule', { method: 'POST', body: JSON.stringify({ id: scheduleId }) })
                 .then(loadDashboardData)
                 .catch(function (error) { alert(error.message); });
         }

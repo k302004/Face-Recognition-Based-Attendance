@@ -2,6 +2,7 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8">
+<meta name="csrf-token" content="{{ csrf_token() }}">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>DRLCEFI</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -563,7 +564,10 @@
                             <h1 id="operationModeTitle">Operation Mode</h1>
                             <p id="operationModeSubtitle">Live camera feed and student profile preview.</p>
                         </div>
-                        <button class="back-link" type="button" onclick="closeOperationMode()">← Back</button>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <button class="tool-btn" type="button" onclick="toggleOperationFullscreen()">Full Screen</button>
+                            <button class="back-link" type="button" onclick="closeOperationMode()">← Back</button>
+                        </div>
                     </div>
                     <div class="operation-grid">
                         <div class="operation-panel">
@@ -572,6 +576,7 @@
                                 <img id="cameraFeedImg" src="" alt="Camera feed" style="display:none;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                 <span class="camera-feed__placeholder">Camera feed will appear here. Start the Python stream first.</span>
                             </div>
+                            <div id="attendanceOverlay" class="attendance-overlay" style="display:none;"></div>
                         </div>
                         <div class="operation-panel">
                             <h2>Student Profile Image</h2>
@@ -602,6 +607,54 @@
                             <button class="save-btn" type="button" onclick="saveSelectedCamera()">Save Camera</button>
                         </div>
                         <div id="cameraConfigSummary" class="setup-summary"></div>
+                    </section>
+
+                    <section class="setup-card sms-settings" aria-labelledby="smsSetupTitle">
+                        <div class="sms-settings__head">
+                            <div>
+                                <p class="section-eyebrow">02 — Notifications</p>
+                                <h2 id="smsSetupTitle">SMS alerts via TextBee</h2>
+                            </div>
+                            <span class="sms-settings__badge">Optional</span>
+                        </div>
+                        <p class="setup-note">Send an SMS to a student's parent phone when attendance is recorded. Leave the phone number blank on a student to skip. Configure templates with variables: <code>@{{time}}</code>, <code>@{{student_name}}</code>, <code>@{{student_id}}</code>, <code>@{{date}}</code>, <code>@{{status}}</code>, <code>@{{course}}</code>.</p>
+
+                        <div class="sms-settings__grid">
+                            <article class="sms-block">
+                                <header class="sms-block__head">
+                                    <h3>Time In</h3>
+                                    <label class="sms-toggle">
+                                        <input type="checkbox" id="smsTimeInEnabled">
+                                        <span class="sms-toggle__track"><span class="sms-toggle__thumb"></span></span>
+                                        <span class="sms-toggle__label">Enabled</span>
+                                    </label>
+                                </header>
+                                <label class="sms-field">
+                                    <span class="sms-field__label">Message template</span>
+                                    <textarea id="smsTimeInMessage" rows="5" placeholder="Good day! This is to inform you that your student, @{{student_name}}, has arrived at school. Attendance was successfully recorded at @{{time}} @{{date}}. This is an automated text message from the Attendance Monitoring System. Please do not reply."></textarea>
+                                </label>
+                            </article>
+
+                            <article class="sms-block">
+                                <header class="sms-block__head">
+                                    <h3>Time Out</h3>
+                                    <label class="sms-toggle">
+                                        <input type="checkbox" id="smsTimeOutEnabled">
+                                        <span class="sms-toggle__track"><span class="sms-toggle__thumb"></span></span>
+                                        <span class="sms-toggle__label">Enabled</span>
+                                    </label>
+                                </header>
+                                <label class="sms-field">
+                                    <span class="sms-field__label">Message template</span>
+                                    <textarea id="smsTimeOutMessage" rows="5" placeholder="Good day! This is to inform you that your student, @{{student_name}}, has departed from school. Attendance was successfully recorded at @{{time}} @{{date}}. This is an automated text message from the Attendance Monitoring System. Please do not reply"></textarea>
+                                </label>
+                            </article>
+                        </div>
+
+                        <div class="setup-save-row">
+                            <button class="save-btn" type="button" onclick="saveNotificationSettings()">Save settings</button>
+                            <span class="setup-status" id="smsSaveStatus" aria-live="polite"></span>
+                        </div>
                     </section>
                 </section>
 

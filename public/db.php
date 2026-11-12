@@ -191,6 +191,15 @@ try {
         foreach (['absent' => 'true', 'late' => 'true', 'checkIn' => 'true'] as $key => $value) {
             $statement->execute([$key, $value]);
         }
+        $defaults = [
+            'sms_time_in_enabled' => 'false',
+            'sms_time_out_enabled' => 'false',
+            'sms_time_in_message' => "Good day!\n\nThis is to inform you that your student, {{student_name}}, has arrived at school. Attendance was successfully recorded at {{time}} {{date}}.\n\nThis is an automated text message from the Attendance Monitoring System. Please do not reply.",
+            'sms_time_out_message' => "Good day!\n\nThis is to inform you that your student, {{student_name}}, has departed from school. Attendance was successfully recorded at {{time}} {{date}}.\n\nThis is an automated text message from the Attendance Monitoring System. Please do not reply",
+        ];
+        foreach ($defaults as $key => $value) {
+            $statement->execute([$key, $value]);
+        }
     }
 } catch (PDOException $error) {
     http_response_code(500);
