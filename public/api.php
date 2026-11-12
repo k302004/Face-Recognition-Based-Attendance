@@ -910,7 +910,7 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
     }
     // Also stop any stray stream processes so the new dimensions take effect.
     if (stripos(PHP_OS, 'WIN') === 0) {
-        shell_exec('taskkill /F /IM python.exe /FI "WINDOWTITLE eq camera_stream*" 2>nul');
+        shell_exec('taskkill /F /FI "IMAGENAME eq python.exe" /FI "WINDOWTITLE eq camera_stream*" 2>nul');
     } else {
         shell_exec('pkill -f "[c]amera_stream.py" 2>/dev/null');
     }
@@ -941,36 +941,11 @@ if ($method === 'POST' && $action === 'camera-stream-start') {
     if (stripos(PHP_OS, 'WIN') === 0) {
         file_put_contents($logFile, '');
         file_put_contents($errorLogFile, '');
-        file_put_contents($launchErrorLogFile, '');
-        $quotePowerShell = static function (string $value): string {
-            return "'".str_replace("'", "''", $value)."'";
-        };
-        $commandLine = 'cmd.exe /c ""'.$python.'" -u "'.$script.'" '
-            .$cameraIndex.' '.$port.' '.$targetWidth.' '.$targetHeight
-            .' > "'.$logFile.'" 2> "'.$errorLogFile.'""';
-        $powershellScript = '$ErrorActionPreference = "Stop"; try { $startup = ([wmiclass]"Win32_ProcessStartup").CreateInstance(); $startup.ShowWindow = 0; $result = ([wmiclass]"Win32_Process").Create('
-            .$quotePowerShell($commandLine).', '.$quotePowerShell(dirname(__DIR__)).', $startup); if ($result.ReturnValue -ne 0) { throw ("Unable to launch camera process: " + $result.ReturnValue) }; [System.IO.File]::WriteAllText('
-            .$quotePowerShell($pidFile).', [string] $result.ProcessId) } catch { [System.IO.File]::WriteAllText('
-            .$quotePowerShell($launchErrorLogFile).', $_.ToString()); exit 1 }';
-        $encodedScript = iconv('UTF-8', 'UTF-16LE', $powershellScript);
-        if ($encodedScript === false) {
-            reply(['message' => 'Unable to prepare the camera startup command.'], 500);
-        }
-        $psCommand = 'powershell.exe -NoProfile -NonInteractive -EncodedCommand '.base64_encode($encodedScript).' >NUL 2>&1';
-        shell_exec($psCommand);
-        // Wait a bit for the process to start and write the pid file.
-        usleep(500000);
-        $pid = is_file($pidFile) ? (int) trim((string) file_get_contents($pidFile)) : 0;
-        if ($pid <= 0) {
-            // Fallback: try launching directly with start /B.
-            $fallbackCommand = 'start /B "" "'.$python.'" -u "'.$script.'" '.$cameraIndex.' '.$port.' '.$targetWidth.' '.$targetHeight.' > "'.$logFile.'" 2> "'.$errorLogFile.'"';
-            shell_exec($fallbackCommand);
-            usleep(1000000);
-            // Try to find the pid by checking the process list.
-            $pidCheck = shell_exec('tasklist /FI "IMAGENAME eq python.exe" /FO CSV /NH 2>nul');
-            // Just return success and let the frontend retry loading.
-            $pid = 1;
-        }
+        // Use start /B for reliable background launch on Windows.
+        $command = 'start /B "" '.$python.' -u '.escapeshellarg($script).' '.escapeshellarg((string) $cameraIndex).' '.escapeshellarg((string) $port).' '.escapeshellarg((string) $targetWidth).' '.escapeshellarg((string) $targetHeight).' > '.escapeshellarg($logFile).' 2> '.escapeshellarg($errorLogFile);
+        pclose(popen($command, 'r'));
+        // Return immediately and let the frontend retry loading the feed.
+        reply(['message' => 'Camera stream starting.', 'pid' => 1, 'url' => 'http://127.0.0.1:'.$port.'/video_feed']);
     } else {
         $command = 'nohup '.$python.' '.escapeshellarg($script).' '.escapeshellarg((string) $cameraIndex).' '.escapeshellarg((string) $port)
             .' '.escapeshellarg((string) $targetWidth).' '.escapeshellarg((string) $targetHeight)
