@@ -461,7 +461,10 @@ async function openOperationMode() {
         }).catch(function () { /* ignore */ });
     }
     try {
-        const ws = new WebSocket('wss://' + window.location.host + '/ws');
+        const wsUrl = window.location.protocol === 'https:'
+            ? 'wss://' + window.location.host + '/ws'
+            : 'ws://127.0.0.1:8091';
+        const ws = new WebSocket(wsUrl);
         window.faceWebSocket = ws;
         ws.onmessage = function (e) {
             try {
@@ -2003,7 +2006,9 @@ async function startCameraStream(img, placeholder, feedContainer, force) {
             image.style.display = 'block';
             var _retryCount = 0;
             var _loadFeed = function () {
-                image.src = '/camera-feed';
+                image.src = window.location.protocol === 'https:'
+                    ? '/camera-feed#' + Date.now()
+                    : 'http://127.0.0.1:8090/video_feed#' + Date.now();
             };
             image.onerror = function () {
                 if (_retryCount < 10) {
