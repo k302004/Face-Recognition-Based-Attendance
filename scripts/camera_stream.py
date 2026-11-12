@@ -478,6 +478,13 @@ class StreamHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
+
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             body = b"<html><body><img src='/video_feed' style='max-width:100%'><div id='student'></div></body></html>"
@@ -543,6 +550,8 @@ class StreamHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache, private")
         self.send_header("Pragma", "no-cache")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
         self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
         self.end_headers()
 
