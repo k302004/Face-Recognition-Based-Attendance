@@ -74,6 +74,32 @@ If Not streamReady Then
     WScript.Sleep 3000
 End If
 
+' Start SMS gateway (send_to_pi.py) if not running
+Dim smsReady
+smsReady = False
+On Error Resume Next
+Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+http.SetTimeouts 300, 300, 300, 300
+http.Open "GET", "http://127.0.0.1:8092/health", False
+http.Send
+smsReady = (Err.Number = 0 And http.Status = 200)
+Err.Clear
+On Error GoTo 0
+
+If Not smsReady Then
+    command = pythonExe & " scripts\send_to_pi.py --serve --http-port 8092 --serial-port COM3 --baud 115200"
+    Set wmi = GetObject("winmgmts:\\.\root\cimv2")
+    Set startup = wmi.Get("Win32_ProcessStartup").SpawnInstance_
+    startup.ShowWindow = 0
+    result = wmi.Get("Win32_Process").Create(command, appDir, startup, processId)
+    If result <> 0 Then
+        MsgBox "Failed to start SMS gateway. Make sure Python and dependencies are installed.", 16, "Attendance System"
+    Else
+        fileSystem.CreateTextFile(appDir & "\.sms-gateway.pid", True).WriteLine processId
+    End If
+    WScript.Sleep 2000
+End If
+
 shell.Run "http://127.0.0.1:8000/?v=" & Replace(CStr(Timer), ".", ""), 1, False
 Set http = Nothing
 Set startup = Nothing

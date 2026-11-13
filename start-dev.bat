@@ -8,6 +8,9 @@ if "%HTTP_PORT%"=="" set "HTTP_PORT=8092"
 if "%SERIAL_PORT%"=="" set "SERIAL_PORT=COM3"
 if "%BAUD%"=="" set "BAUD=115200"
 
+echo Starting camera stream...
+start "Camera Stream" cmd /k "python scripts\camera_stream.py"
+
 echo Starting Pi SMS bridge on port %HTTP_PORT% (serial %SERIAL_PORT% @ %BAUD%)...
 start "Pi SMS Bridge" cmd /k "python scripts\send_to_pi.py --serve --http-port %HTTP_PORT% --serial-port %SERIAL_PORT% --baud %BAUD%"
 

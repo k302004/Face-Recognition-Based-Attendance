@@ -582,11 +582,7 @@ async function closeOperationMode() {
     cameraStreamWidth = 0;
     cameraStreamHeight = 0;
     hideCameraInitOverlay();
-    try {
-        await requestApi('camera-stream-stop', { method: 'POST' });
-    } catch (error) {
-        // ignore
-    }
+    // Camera stream is managed externally (e.g. by Start All.vbs); do not stop it here.
     const home = document.getElementById('homeView');
     if (home) home.hidden = false;
     const homeLink = document.querySelector('[data-view="home"]');
@@ -2062,10 +2058,7 @@ async function startCameraStream(img, placeholder, feedContainer, force) {
     cameraStreamStarting = true;
     showCameraInitOverlay('Initializing camera feed (' + targetWidth + '×' + targetHeight + ')…');
     try {
-        await requestApi('camera-stream-start', {
-            method: 'POST',
-            body: JSON.stringify({ width: targetWidth, height: targetHeight })
-        });
+        // Camera stream is started externally (e.g. by Start All.vbs); just use it.
         cameraStreamWidth = targetWidth;
         cameraStreamHeight = targetHeight;
         if (image) {

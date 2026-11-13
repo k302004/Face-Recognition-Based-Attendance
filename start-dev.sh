@@ -12,6 +12,11 @@ BAUD="${BAUD:-115200}"
 
 mkdir -p storage/logs
 
+echo "Starting camera stream (scripts/camera_stream.py) on http://0.0.0.0:8090..."
+python3 scripts/camera_stream.py > storage/logs/camera_stream.log 2>&1 &
+CAM_PID=$!
+echo "Camera stream PID: ${CAM_PID}  (log: storage/logs/camera_stream.log)"
+
 echo "Starting Pi SMS bridge on http://0.0.0.0:${HTTP_PORT} (serial ${SERIAL_PORT} @ ${BAUD})..."
 python3 scripts/send_to_pi.py --serve \
     --http-port "${HTTP_PORT}" \
@@ -26,8 +31,8 @@ DEV_PID=$!
 
 cleanup() {
     echo "Stopping..."
-    kill "${PI_PID}" "${DEV_PID}" 2>/dev/null || true
-    wait "${PI_PID}" "${DEV_PID}" 2>/dev/null || true
+    kill "${CAM_PID}" "${PI_PID}" "${DEV_PID}" 2>/dev/null || true
+    wait "${CAM_PID}" "${PI_PID}" "${DEV_PID}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
