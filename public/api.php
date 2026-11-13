@@ -119,6 +119,30 @@ function deviceToken(): string
 
     return '';
 }
+function smsProvider(): string
+{
+    $provider = getenv('SMS_PROVIDER');
+    if ($provider !== false && trim($provider) !== '') {
+        return strtolower(trim($provider));
+    }
+    $envPath = dirname(__DIR__).DIRECTORY_SEPARATOR.'.env';
+    if (is_file($envPath)) {
+        foreach (file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            if (strpos($line, 'SMS_PROVIDER=') === 0) {
+                return strtolower(trim(substr($line, strlen('SMS_PROVIDER=')), " \t\n\r\0\x0B\"'"));
+            }
+        }
+    }
+    $configPath = __DIR__.DIRECTORY_SEPARATOR.'device_config.php';
+    if (is_file($configPath)) {
+        $config = require $configPath;
+        if (is_array($config) && ! empty($config['sms_provider'])) {
+            return strtolower(trim((string) $config['sms_provider']));
+        }
+    }
+
+    return 'textbee';
+}
 function generateVerificationCode(): string
 {
     return str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
@@ -362,13 +386,13 @@ if ($method === 'POST' && $action === 'device-attendance') {
             reply(['message' => 'Time out already recorded for this student today.'], 409);
         }
         audit($db, 'Device recorded time out for '.$studentId);
-        reply(['message' => 'Time out recorded.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'parentPhone' => $student['parent_phone'], 'date' => $attendanceDate, 'timeOut' => $timeOut, 'action' => 'time_out']);
+        reply(['message' => 'Time out recorded.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'parentPhone' => $student['parent_phone'], 'date' => $attendanceDate, 'timeOut' => $timeOut, 'action' => 'time_out', 'smsProvider' => smsProvider()]);
     }
 
     $statement = $db->prepare('INSERT INTO attendance (student_id, student_name, course, attendance_date, subject, time_in, time_out, status, school_year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $statement->execute([$student['student_id'], $student['full_name'], $student['course'], $attendanceDate, $subject, $timeIn, $timeOut, $status, $student['school_year']]);
     audit($db, 'Device recorded '.$status.' attendance for '.$studentId);
-    reply(['message' => 'Attendance recorded.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'parentPhone' => $student['parent_phone'], 'date' => $attendanceDate]);
+    reply(['message' => 'Attendance recorded.', 'studentId' => $studentId, 'studentName' => $student['full_name'], 'parentPhone' => $student['parent_phone'], 'date' => $attendanceDate, 'smsProvider' => smsProvider()]);
 }
 
 if ($method === 'POST' && $action === 'logout') {
@@ -434,7 +458,12 @@ if ($method === 'POST' && $action === 'reset-password') {
     reply(['message' => 'Your password has been updated successfully.']);
 }
 
-requireLogin();
+// Camera endpoints operate on local hardware and are reached from the
+// (Laravel-authenticated) dashboard; the plain-PHP api.php session is never
+// populated by the Laravel login flow, so do not gate them on it.
+if (strpos($action, 'camera') !== 0) {
+    requireLogin();
+}
 
 if ($method === 'POST' && $action === 'profile') {
     $name = trim((string) ($payload['name'] ?? ''));

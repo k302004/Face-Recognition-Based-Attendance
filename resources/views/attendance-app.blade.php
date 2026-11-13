@@ -617,7 +617,7 @@
                             </div>
                             <span class="sms-settings__badge">Optional</span>
                         </div>
-                        <p class="setup-note">Send an SMS to a student's parent phone when attendance is recorded. Leave the phone number blank on a student to skip. Configure templates with variables: <code>@{{time}}</code>, <code>@{{student_name}}</code>, <code>@{{student_id}}</code>, <code>@{{date}}</code>, <code>@{{status}}</code>, <code>@{{course}}</code>.</p>
+                        <p class="setup-note">Send an SMS to a student's parent phone when attendance is recorded. Leave the phone number blank on a student to skip. Configure templates with variables: <code>@{{time}}</code>, <code>@{{student_name}}</code>, <code>@{{student_id}}</code>, <code>@{{date}}</code>, <code>@{{status}}</code>, <code>@{{course}}</code>. Messages are limited to 900 characters (multi-part SMS supported).</p>
 
                         <div class="sms-settings__grid">
                             <article class="sms-block">
@@ -631,7 +631,8 @@
                                 </header>
                                 <label class="sms-field">
                                     <span class="sms-field__label">Message template</span>
-                                    <textarea id="smsTimeInMessage" rows="5" placeholder="Good day! This is to inform you that your student, @{{student_name}}, has arrived at school. Attendance was successfully recorded at @{{time}} @{{date}}. This is an automated text message from the Attendance Monitoring System. Please do not reply."></textarea>
+                                    <textarea id="smsTimeInMessage" rows="8" maxlength="900" placeholder="Good Day! This is to inform you that your student, @{{student_name}}, has arrived at school. Attendance was successfully recorded at @{{time}} @{{date}}. This is an automated message from the Attendance Monitoring System. Please do not reply."></textarea>
+                                    <span class="sms-char-count" id="smsTimeInCount">0/900</span>
                                 </label>
                             </article>
 
@@ -646,7 +647,8 @@
                                 </header>
                                 <label class="sms-field">
                                     <span class="sms-field__label">Message template</span>
-                                    <textarea id="smsTimeOutMessage" rows="5" placeholder="Good day! This is to inform you that your student, @{{student_name}}, has departed from school. Attendance was successfully recorded at @{{time}} @{{date}}. This is an automated text message from the Attendance Monitoring System. Please do not reply"></textarea>
+                                    <textarea id="smsTimeOutMessage" rows="8" maxlength="900" placeholder="Good Day! This is to inform you that your student, @{{student_name}}, has departed from school. Attendance was successfully recorded at @{{time}} @{{date}}. This is an automated message from the Attendance Monitoring System. Please do not reply."></textarea>
+                                    <span class="sms-char-count" id="smsTimeOutCount">0/900</span>
                                 </label>
                             </article>
                         </div>

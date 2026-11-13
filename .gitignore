@@ -14,3 +14,4 @@ storage/framework
 .openidea/
 public/camera.config
 /raspberry_pi_scripts/venv/
+/.venv

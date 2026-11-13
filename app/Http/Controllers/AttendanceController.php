@@ -9,6 +9,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class AttendanceController extends Controller
 {
@@ -173,18 +175,27 @@ class AttendanceController extends Controller
     {
         $enabledKey = $action === 'time_in' ? 'sms_time_in_enabled' : 'sms_time_out_enabled';
         $messageKey = $action === 'time_in' ? 'sms_time_in_message' : 'sms_time_out_message';
-        if ($this->setting($enabledKey) !== 'true') {
+        $provider = strtolower((string) env('SMS_PROVIDER', 'textbee'));
+        // When the Raspberry Pi is the SMS backend, sending is always enabled.
+        if ($provider !== 'raspberry_pi' && $this->setting($enabledKey) !== 'true') {
             return;
         }
         $phone = trim((string) ($student->parent_phone ?? ''));
+        if ($provider === 'raspberry_pi') {
+            Log::info('Dispatching SMS to Pi', [
+                'action' => $action,
+                'phone' => $phone,
+                'student' => $student->full_name,
+            ]);
+        }
         if ($phone === '') {
             return;
         }
         $template = $this->setting($messageKey);
         if ($template === null || trim($template) === '') {
             $template = $action === 'time_in'
-                ? "Good day!\n\nThis is to inform you that your student, {{student_name}}, has arrived at school. Attendance was successfully recorded at {{time}} {{date}}.\n\nThis is an automated text message from the Attendance Monitoring System. Please do not reply."
-                : "Good day!\n\nThis is to inform you that your student, {{student_name}}, has departed from school. Attendance was successfully recorded at {{time}} {{date}}.\n\nThis is an automated text message from the Attendance Monitoring System. Please do not reply";
+                ? 'Good day! Your student, {{student_name}}, has arrived at school. Attendance recorded at {{time}} {{date}}.'
+                : 'Good day! Your student, {{student_name}}, has departed from school. Attendance recorded at {{time}} {{date}}.';
         }
         $message = SmsService::render($template, [
             'time' => $time,
@@ -194,7 +205,71 @@ class AttendanceController extends Controller
             'status' => 'Present',
             'course' => $student->course,
         ]);
+
+        if ($provider === 'raspberry_pi') {
+            $this->sendAttendanceSmsViaPi($phone, $message, $student->full_name);
+
+            return;
+        }
         (new SmsService)->send($phone, $message);
+    }
+
+    private function resolvePython(): string
+    {
+        $isWindows = stripos(PHP_OS_FAMILY, 'Windows') !== false;
+        $relative = $isWindows ? 'Scripts'.DIRECTORY_SEPARATOR.'python.exe' : 'bin'.DIRECTORY_SEPARATOR.'python';
+        $candidates = [
+            base_path('.venv'.DIRECTORY_SEPARATOR.$relative),
+            base_path('raspberry_pi'.DIRECTORY_SEPARATOR.'.venv'.DIRECTORY_SEPARATOR.$relative),
+            base_path('venv'.DIRECTORY_SEPARATOR.$relative),
+        ];
+        foreach ($candidates as $candidate) {
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $isWindows ? 'python' : 'python3';
+    }
+
+    private function sendAttendanceSmsViaPi(string $phone, string $message, string $name): void
+    {
+        $configured = (string) env('PI_SMS_URL', 'http://host.docker.internal:8092/send-sms');
+        $parts = parse_url($configured);
+        $port = $parts['port'] ?? 8092;
+        $path = $parts['path'] ?? '/send-sms';
+        $hosts = array_values(array_unique(array_filter([
+            $parts['host'] ?? null,
+            'host.docker.internal',
+            '127.0.0.1',
+            'localhost',
+        ])));
+        $urls = [];
+        foreach ($hosts as $host) {
+            $scheme = $parts['scheme'] ?? 'http';
+            $urls[] = "{$scheme}://{$host}:{$port}{$path}";
+        }
+        $urls = array_values(array_unique($urls));
+
+        foreach ($urls as $url) {
+            Log::info('Pi SMS HTTP dispatch starting', ['url' => $url, 'phone' => $phone]);
+            try {
+                $response = Http::timeout(5)->post($url, [
+                    'phone' => $phone,
+                    'message' => $message,
+                    'name' => $name,
+                ]);
+                Log::info('Pi SMS HTTP dispatch finished', ['url' => $url, 'status' => $response->status(), 'body' => $response->body()]);
+                if ($response->successful()) {
+                    return;
+                }
+                Log::warning('Pi SMS HTTP dispatch failed', ['url' => $url, 'status' => $response->status(), 'body' => $response->body()]);
+            } catch (\Throwable $e) {
+                Log::warning('Pi SMS HTTP dispatch exception', ['url' => $url, 'error' => $e->getMessage()]);
+                continue;
+            }
+        }
+        Log::error('Pi SMS HTTP dispatch failed on all candidate URLs', ['urls' => $urls]);
     }
 
     private function deviceToken(): string

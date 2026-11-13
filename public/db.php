@@ -186,20 +186,31 @@ try {
         }
     }
 
+    $defaults = [
+        'sms_time_in_enabled' => 'false',
+        'sms_time_out_enabled' => 'false',
+        'sms_time_in_message' => "Good Day!\n\nThis is to inform you that your student, {{student_name}}, has arrived at school. Attendance was successfully recorded at {{time}} {{date}}.\n\nThis is an automated message from the Attendance Monitoring System. Please do not reply.",
+        'sms_time_out_message' => "Good Day!\n\nThis is to inform you that your student, {{student_name}}, has departed from school. Attendance was successfully recorded at {{time}} {{date}}.\n\nThis is an automated message from the Attendance Monitoring System. Please do not reply.",
+    ];
+
     if ((int) $db->query('SELECT COUNT(*) FROM notification_settings')->fetchColumn() === 0) {
         $statement = $db->prepare('INSERT INTO notification_settings (setting_key, setting_value) VALUES (?, ?)');
         foreach (['absent' => 'true', 'late' => 'true', 'checkIn' => 'true'] as $key => $value) {
             $statement->execute([$key, $value]);
         }
-        $defaults = [
-            'sms_time_in_enabled' => 'false',
-            'sms_time_out_enabled' => 'false',
-            'sms_time_in_message' => "Good day!\n\nThis is to inform you that your student, {{student_name}}, has arrived at school. Attendance was successfully recorded at {{time}} {{date}}.\n\nThis is an automated text message from the Attendance Monitoring System. Please do not reply.",
-            'sms_time_out_message' => "Good day!\n\nThis is to inform you that your student, {{student_name}}, has departed from school. Attendance was successfully recorded at {{time}} {{date}}.\n\nThis is an automated text message from the Attendance Monitoring System. Please do not reply",
-        ];
         foreach ($defaults as $key => $value) {
             $statement->execute([$key, $value]);
         }
+    }
+
+    // Migrate previously-seeded default messages to the updated wording.
+    $oldDefaults = [
+        'sms_time_in_message' => "Good day!\n\nThis is to inform you that your student, {{student_name}}, has arrived at school. Attendance was successfully recorded at {{time}} {{date}}.\n\nThis is an automated text message from the Attendance Monitoring System. Please do not reply.",
+        'sms_time_out_message' => "Good day!\n\nThis is to inform you that your student, {{student_name}}, has departed from school. Attendance was successfully recorded at {{time}} {{date}}.\n\nThis is an automated text message from the Attendance Monitoring System. Please do not reply",
+    ];
+    $updateStatement = $db->prepare('UPDATE notification_settings SET setting_value = ? WHERE setting_key = ? AND setting_value = ?');
+    foreach ($oldDefaults as $key => $oldValue) {
+        $updateStatement->execute([$defaults[$key], $key, $oldValue]);
     }
 } catch (PDOException $error) {
     http_response_code(500);

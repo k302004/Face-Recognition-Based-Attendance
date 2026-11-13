@@ -1748,6 +1748,13 @@ function loadNotificationSettings() {
     if (document.getElementById('smsTimeOutEnabled')) document.getElementById('smsTimeOutEnabled').checked = settings.sms_time_out_enabled === 'true';
     if (document.getElementById('smsTimeInMessage')) document.getElementById('smsTimeInMessage').value = settings.sms_time_in_message || '';
     if (document.getElementById('smsTimeOutMessage')) document.getElementById('smsTimeOutMessage').value = settings.sms_time_out_message || '';
+    // refresh char counters
+    const inTa = document.getElementById('smsTimeInMessage');
+    const outTa = document.getElementById('smsTimeOutMessage');
+    const inCount = document.getElementById('smsTimeInCount');
+    const outCount = document.getElementById('smsTimeOutCount');
+    if (inTa && inCount) inCount.textContent = inTa.value.length + '/900';
+    if (outTa && outCount) outCount.textContent = outTa.value.length + '/900';
 }
 
 function loadNotificationSettingsFromData() { loadNotificationSettings(); }
@@ -2791,3 +2798,24 @@ function setTimeValue(value) {
         input.value = value;
     }
 }
+
+// SMS template character counters (900-char multi-part SMS limit)
+(function () {
+    function updateCounter(textareaId, counterId) {
+        const ta = document.getElementById(textareaId);
+        const counter = document.getElementById(counterId);
+        if (!ta || !counter) return;
+        const update = () => { counter.textContent = ta.value.length + '/900'; };
+        ta.addEventListener('input', update);
+        update();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            updateCounter('smsTimeInMessage', 'smsTimeInCount');
+            updateCounter('smsTimeOutMessage', 'smsTimeOutCount');
+        });
+    } else {
+        updateCounter('smsTimeInMessage', 'smsTimeInCount');
+        updateCounter('smsTimeOutMessage', 'smsTimeOutCount');
+    }
+})();

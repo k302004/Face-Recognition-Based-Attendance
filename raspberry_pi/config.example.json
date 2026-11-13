@@ -9,5 +9,8 @@
   "sms_enabled": false,
   "sms_port": "/dev/ttyUSB2",
   "sms_baud": 115200,
-  "sms_message": "{name} checked in for {subject} at {time}."
+  "sms_message": "{name} checked in for {subject} at {time}.",
+  "sms_provider": "raspberry_pi",
+  "textbee_api_key": "",
+  "textbee_device_id": ""
 }

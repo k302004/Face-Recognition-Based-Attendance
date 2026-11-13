@@ -4,3 +4,4 @@ requests
 pyserial
 RPLCD
 numpy
+python-gsmmodem

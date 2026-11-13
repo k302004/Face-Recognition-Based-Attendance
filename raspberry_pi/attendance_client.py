@@ -25,6 +25,11 @@ try:
 except ImportError:
     CharLCD = None
 
+try:
+    from gsmmodem.pdu import encodeSmsSubmitPdu
+except ImportError:
+    encodeSmsSubmitPdu = None
+
 
 ROOT = Path(__file__).resolve().parent
 
@@ -142,23 +147,85 @@ def load_known_faces(directory):
 
 
 def send_sms(config, recipient, name, subject, checked_in_at):
-    if not config.get("sms_enabled"):
-        return
-    import serial
-
     if not recipient:
         print("SMS skipped: this student has no parent phone number")
         return
+    if encodeSmsSubmitPdu is None:
+        print("gsmmodem not installed; skipping SMS")
+        return
     message = config["sms_message"].format(name=name, subject=subject, time=checked_in_at)
-    with serial.Serial(config["sms_port"], config.get("sms_baud", 115200), timeout=5) as modem:
-        modem.write(b"AT\r")
-        time.sleep(1)
-        modem.write(b"AT+CMGF=1\r")
-        time.sleep(1)
-        modem.write((f'AT+CMGS="{recipient}"\r').encode())
-        time.sleep(1)
-        modem.write(message.encode() + b"\x1a")
-        time.sleep(5)
+    port = config.get("sms_port", "/dev/ttyAMA0")
+    baud = config.get("sms_baud", 115200)
+    try:
+        import serial
+        with serial.Serial(port, baud, timeout=5) as modem:
+            modem.reset_input_buffer()
+            # Wait for boot
+            boot_buf = ""
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                if modem.in_waiting:
+                    boot_buf += modem.read(modem.in_waiting).decode("utf-8", errors="ignore")
+                    if "SMS DONE" in boot_buf or "PB DONE" in boot_buf or "READY" in boot_buf:
+                        break
+                time.sleep(0.2)
+            # Wait for AT OK
+            for _ in range(10):
+                modem.reset_input_buffer()
+                modem.write(b"AT\r")
+                time.sleep(1)
+                if "OK" in modem.read(modem.in_waiting or 0).decode("utf-8", errors="ignore"):
+                    break
+                time.sleep(1)
+            # PDU mode
+            modem.write(b"AT+CMGF=0\r")
+            time.sleep(1)
+            modem.read(modem.in_waiting or 0)
+
+            pdus = encodeSmsSubmitPdu(recipient, message)
+            for idx, pdu in enumerate(pdus, start=1):
+                # gsmmodem returns Pdu objects whose raw octets live in
+                # `.data`; older wrappers may expose them differently.
+                if hasattr(pdu, "data") and isinstance(getattr(pdu, "data", None), (bytes, bytearray)):
+                    pdu_hex = bytes(pdu.data).hex().upper()
+                elif hasattr(pdu, "toHex"):
+                    res = pdu.toHex()
+                    pdu_hex = res.upper() if isinstance(res, str) else res.hex().upper()
+                else:
+                    pdu_hex = str(pdu).upper()
+                tpdu_length = pdu.tpduLength
+                for attempt in range(1, 4):
+                    modem.reset_input_buffer()
+                    modem.write(("AT+CMGS=%d\r" % tpdu_length).encode())
+                    deadline = time.time() + 5
+                    prompt_buf = ""
+                    while time.time() < deadline:
+                        if modem.in_waiting:
+                            prompt_buf += modem.read(modem.in_waiting).decode("utf-8", errors="ignore")
+                            if ">" in prompt_buf:
+                                break
+                        time.sleep(0.1)
+                    if ">" not in prompt_buf:
+                        time.sleep(1)
+                        continue
+                    modem.write((pdu_hex + "\x1a").encode())
+                    final_resp = ""
+                    deadline = time.time() + 15
+                    while time.time() < deadline:
+                        if modem.in_waiting:
+                            final_resp += modem.read(modem.in_waiting).decode("utf-8", errors="ignore")
+                            if "OK" in final_resp or "ERROR" in final_resp or "+CMGS" in final_resp or "+CMS ERROR" in final_resp:
+                                break
+                        time.sleep(0.5)
+                    if "OK" in final_resp or "+CMGS" in final_resp:
+                        break
+                    time.sleep(2)
+                else:
+                    print(f"SMS segment {idx} failed")
+                    return
+            print(f"SMS sent to {recipient}")
+    except Exception as error:
+        print(f"[SMS] Failed to send: {error}")
 
 
 def record_attendance(config, student_id, name):
@@ -191,7 +258,15 @@ def record_attendance(config, student_id, name):
     if result.get("action") == "time_out":
         print(f"Time out recorded for {student_id} at {result.get('timeOut')}")
     else:
-        send_sms(config, result.get("parentPhone"), result.get("studentName", name), config["subject"], checked_in_at)
+        provider = str(result.get("smsProvider") or config.get("sms_provider", "raspberry_pi")).lower()
+        phone = result.get("parentPhone")
+        student_name = result.get("studentName", name)
+        message = config.get("sms_message", "{name} checked in.").format(name=student_name, subject=config["subject"], time=checked_in_at)
+        if provider == "textbee":
+            send_textbee(config, phone, message)
+        else:
+            # raspberry_pi provider implies SMS is always enabled
+            send_sms(config, phone, student_name, config["subject"], checked_in_at)
         print(f"Time in recorded for {student_id} ({name}) at {checked_in_at}")
     return True
 
