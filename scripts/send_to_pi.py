@@ -14,6 +14,7 @@ Two modes:
 """
 
 import argparse
+import queue
 import json
 import os
 import sys
@@ -40,7 +41,7 @@ def _venv_python():
     return None
 
 _venv = _venv_python()
-if _venv is not None and Path(sys.executable).resolve() != _venv.resolve():
+if __name__ == "__main__" and _venv is not None and Path(sys.executable).resolve() != _venv.resolve():
     os.execv(str(_venv), [str(_venv), *sys.argv])
 
 try:
@@ -49,65 +50,92 @@ except ImportError:
     print("pyserial is not installed. Install with: pip install pyserial", file=sys.stderr)
     raise SystemExit(1)
 
-DEFAULT_SERIAL_PORT = "/dev/cu.usbmodem101"
+DEFAULT_SERIAL_PORT = "COM4"
 DEFAULT_BAUD = 115200
 DEFAULT_HTTP_PORT = 8092
 SERIAL_LOCK = threading.Lock()
+SERIAL_CONNECTION = None
+SMS_QUEUE = queue.Queue(maxsize=100)
 
 
-def send_to_serial(serial_port, baud, payload, timeout=5):
-    """Send one payload to the Pi over serial and return the ACK string."""
-    if not payload.get("phone"):
-        raise ValueError("Missing phone number in payload")
-    if not payload.get("message"):
-        raise ValueError("Missing message in payload")
-
-    with SERIAL_LOCK:
-        # Opening the port can hang indefinitely on some platforms if the
-        # device is busy or not ready, so do it in a thread with a timeout.
-        result = {"ser": None, "error": None}
-        def _open():
-            try:
-                result["ser"] = serial.Serial(serial_port, baud, timeout=2, write_timeout=2, rtscts=False, dsrdtr=False, xonxoff=False)
-            except Exception as exc:  # pragma: no cover - depends on hardware
-                result["error"] = exc
-        opener = threading.Thread(target=_open, daemon=True)
-        opener.start()
-        opener.join(8)
-        if opener.is_alive():
-            raise TimeoutError(f"Timed out opening serial port {serial_port}")
-        if result["error"] is not None:
-            raise result["error"]
-        ser = result["ser"]
-        time.sleep(2)
-        line = (json.dumps(payload) + "\n").encode("utf-8")
-        for i in range(0, len(line), 4):
-            ser.write(line[i:i + 4])
-            ser.flush()
-            time.sleep(0.005)
-        time.sleep(0.2)
-
-        ack_buf = b""
-        deadline = time.time() + (timeout or 5)
-        while time.time() < deadline:
-            if ser.in_waiting:
-                ack_buf += ser.read(ser.in_waiting)
-                if b"\n" in ack_buf:
-                    break
+def read_sms_ack(ser, payload, timeout):
+    """Ignore boot/debug lines and wait for a matching delivery result."""
+    pending = b""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        available = ser.in_waiting
+        if not available:
             time.sleep(0.01)
-        response = ack_buf.split(b"\n", 1)[0].decode("utf-8", errors="ignore").strip()
+            continue
+        pending += ser.read(available)
+        while b"\n" in pending:
+            line, pending = pending.split(b"\n", 1)
+            try:
+                ack = json.loads(line.decode("utf-8", errors="ignore").strip())
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if not isinstance(ack, dict):
+                continue
+            if payload.get("event_id") and ack.get("event_id") != payload["event_id"]:
+                continue
+            if payload.get("send_sms") is False and ack.get("attendance_received") is True:
+                return json.dumps(ack)
+            if "sent" not in ack or ack.get("phone") != payload.get("phone"):
+                continue
+            if ack.get("sent") is not True:
+                raise RuntimeError(f"SMS delivery failed: {ack.get('reason', 'unknown')}")
+            return json.dumps(ack)
+    raise TimeoutError("No matching SMS delivery acknowledgment received")
 
+
+def send_to_serial(serial_port, baud, payload, timeout=60):
+    global SERIAL_CONNECTION
+    display_only = payload.get("send_sms") is False and payload.get("action") in ("time_in", "time_out") and bool(payload.get("name"))
+    if not display_only and (not payload.get("phone") or not payload.get("message")):
+        raise ValueError("Missing phone number or message")
+    with SERIAL_LOCK:
         try:
-            log_path = Path(__file__).resolve().parents[1] / "storage" / "logs" / "pi-sms.log"
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            with log_path.open("a", encoding="utf-8") as lf:
-                lf.write(f"{datetime.now().isoformat()} payload={json.dumps(payload)} ack={response}\n")
+            # Reopening the serial port resets some USB bridges. Keep it open
+            # between messages so time-in and time-out use the same connection.
+            if SERIAL_CONNECTION is None or not SERIAL_CONNECTION.is_open:
+                SERIAL_CONNECTION = serial.Serial(
+                    serial_port, baud, timeout=2, write_timeout=2,
+                    rtscts=False, dsrdtr=False, xonxoff=False,
+                )
+                time.sleep(2)
+                SERIAL_CONNECTION.reset_input_buffer()
+            ser = SERIAL_CONNECTION
+            line = (json.dumps(payload) + "\n").encode("utf-8")
+            for i in range(0, len(line), 4):
+                ser.write(line[i:i + 4])
+                ser.flush()
+                time.sleep(0.005)
+            response = read_sms_ack(ser, payload, timeout)
+            log_sms(payload, response)
+            return response
         except Exception:
-            pass
+            if SERIAL_CONNECTION is not None:
+                SERIAL_CONNECTION.close()
+                SERIAL_CONNECTION = None
+            raise
 
-        ser.close()
-        return response
 
+def log_sms(payload, result):
+    log_path = Path(__file__).resolve().parents[1] / "storage/logs/pi-sms.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(f"{datetime.now().isoformat()} payload={json.dumps(payload)} result={result}\n")
+
+
+def sms_worker(serial_port, baud):
+    while True:
+        payload = SMS_QUEUE.get()
+        try:
+            send_to_serial(serial_port, baud, payload)
+        except Exception as error:
+            log_sms(payload, f"FAILED: {error}")
+        finally:
+            SMS_QUEUE.task_done()
 
 def build_payload(args):
     if not sys.stdin.isatty():
@@ -154,9 +182,13 @@ class SmsHandler(BaseHTTPRequestHandler):
         if not isinstance(payload, dict):
             self._send_json(400, {"error": "payload must be a JSON object"})
             return
+        display_only = payload.get("send_sms") is False and payload.get("action") in ("time_in", "time_out") and bool(payload.get("name"))
+        if not display_only and (not payload.get("phone") or not payload.get("message")):
+            self._send_json(400, {"ok": False, "error": "phone and message are required"})
+            return
         try:
-            ack = send_to_serial(self.serial_port, self.baud, payload)
-            self._send_json(200, {"ok": True, "ack": ack})
+            SMS_QUEUE.put_nowait(payload)
+            self._send_json(202, {"ok": True, "state": "queued"})
         except Exception as e:
             self._send_json(500, {"ok": False, "error": str(e)})
 
@@ -174,6 +206,7 @@ class SmsHandler(BaseHTTPRequestHandler):
 def serve(http_port, serial_port, baud):
     SmsHandler.serial_port = serial_port
     SmsHandler.baud = baud
+    threading.Thread(target=sms_worker, args=(serial_port, baud), daemon=True).start()
     httpd = ThreadingHTTPServer(("0.0.0.0", http_port), SmsHandler)
     print(f"SMS bridge listening on http://0.0.0.0:{http_port}")
     print(f"Forwarding to Pi via {serial_port} @ {baud}")
@@ -192,7 +225,7 @@ def main():
     parser.add_argument("--serial-port", default=DEFAULT_SERIAL_PORT, help="Serial port to the Pi")
     parser.add_argument("--baud", type=int, default=DEFAULT_BAUD, help="Baud rate")
     parser.add_argument("--port", default=DEFAULT_SERIAL_PORT, help="Serial port (one-shot mode)")
-    parser.add_argument("--timeout", type=int, default=5, help="Response timeout (seconds)")
+    parser.add_argument("--timeout", type=int, default=60, help="Response timeout (seconds)")
     parser.add_argument("--phone", help="Recipient phone number (one-shot mode)")
     parser.add_argument("--message", help="SMS message body (one-shot mode)")
     parser.add_argument("--name", help="User/student name (one-shot mode)")

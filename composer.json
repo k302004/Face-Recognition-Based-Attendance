@@ -44,7 +44,10 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "@php artisan dev"
+            "@php artisan serve",
+            "@php artisan reverb start",
+            "python scripts/camera_stream.py",
+            "python scripts/send_to_pi.py --serve --http-port 8092 --serial-port /dev/cu.usbmodem101 --baud 115200"
         ],
         "test": [
             "@php artisan config:clear --ansi @no_additional_args",

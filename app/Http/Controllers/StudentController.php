@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Attendance;
 use App\Models\AuditLog;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;

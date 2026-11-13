@@ -1,20 +1,19 @@
-' Stop Attendance.vbs
+' Stops only attendance services recorded by this launcher.
 Option Explicit
-
-Dim shell, fileSystem, appDir, pidFile, pid, file
+Dim shell, fs, appDir, helper, command
 Set shell = CreateObject("WScript.Shell")
-Set fileSystem = CreateObject("Scripting.FileSystemObject")
-appDir = fileSystem.GetParentFolderName(WScript.ScriptFullName)
-pidFile = appDir & "\.attendance-server.pid"
-
-If fileSystem.FileExists(pidFile) Then
-	Set file = fileSystem.OpenTextFile(pidFile, 1)
-	pid = Trim(file.ReadLine)
-	file.Close
-	If IsNumeric(pid) Then shell.Run "taskkill /PID " & CLng(pid) & " /T /F", 0, True
-	fileSystem.DeleteFile pidFile, True
+Set fs = CreateObject("Scripting.FileSystemObject")
+appDir = fs.GetParentFolderName(WScript.ScriptFullName)
+helper = appDir & "\scripts\start_attendance.ps1"
+If Not fs.FileExists(helper) Then
+    MsgBox "Missing launcher helper: " & helper, 16, "Attendance startup"
+    WScript.Quit 1
 End If
-
-Set file = Nothing
-Set fileSystem = Nothing
-Set shell = Nothing
+command = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File """ & helper & """"
+If WScript.Arguments.Count > 0 Then
+    If WScript.Arguments(0) = "--check" Then
+        WScript.Echo "Launcher syntax OK"
+        WScript.Quit 0
+    End If
+End If
+WScript.Quit shell.Run(command & " -Stop", 0, True)

@@ -260,6 +260,19 @@ async function ensureCameraConfigured() {
     return false;
 }
 
+let operationMonitorSession = null;
+let operationMonitorHeartbeat = null;
+
+function stopOperationMonitor() {
+    const session = operationMonitorSession;
+    operationMonitorSession = null;
+    if (operationMonitorHeartbeat) clearInterval(operationMonitorHeartbeat);
+    operationMonitorHeartbeat = null;
+    if (session) requestApi('/api/monitor/stop', {
+        method: 'POST', body: JSON.stringify({ session }), keepalive: true
+    }).catch(function (error) { console.warn('Monitor stop:', error.message); });
+}
+
 async function openOperationMode() {
     const configured = await ensureCameraConfigured();
     if (!configured) {
@@ -269,6 +282,24 @@ async function openOperationMode() {
     if (!choice) {
         return;
     }
+    stopOperationMonitor();
+    let monitor;
+    try {
+        monitor = await requestApi('/api/monitor/start', { method: 'POST', body: JSON.stringify({ mode: choice }) });
+    } catch (error) {
+        alert('Unable to start Operation Mode: ' + error.message);
+        return;
+    }
+    const monitorSession = monitor.session;
+    operationMonitorSession = monitorSession;
+    operationMonitorHeartbeat = setInterval(function () {
+        requestApi('/api/monitor/heartbeat', { method: 'POST', body: JSON.stringify({ session: monitorSession }) })
+            .catch(function (error) {
+                console.warn('Monitor heartbeat:', error.message);
+                // A lost/expired lease must not keep recording in a stale session.
+                if (operationMonitorSession === monitorSession) closeOperationMode();
+            });
+    }, 5000);
     operationAttendanceAction = choice;
     const titleEl = document.getElementById('operationModeTitle');
     const subtitleEl = document.getElementById('operationModeSubtitle');
@@ -333,6 +364,7 @@ async function openOperationMode() {
     // Poll the backend for the currently detected face/student.
     var _recordedAttendance = {};
     function updateFaceInfoFromData(data) {
+        if (operationMonitorSession !== monitorSession || !document.body.classList.contains("operation-mode-active")) return;
         const info = (data && data.student) ? data.student : null;
         const faceDetected = !!(data && data.face_detected);
         if (!dashboardData || !Array.isArray(dashboardData.students) || dashboardData.students.length === 0) {
@@ -379,18 +411,22 @@ async function openOperationMode() {
                         details.push('<div class="student-detail-row"><span class="student-detail-label">Confidence</span><span class="student-detail-value">' + escapeHtml(Number(info.confidence).toFixed(2)) + '</span></div>');
                     }
                 } else {
-                    details.push('<div class="student-detail-row"><span class="student-detail-value">Student details not found in dashboard data (detected ID: ' + escapeHtml(info.student_id) + ').</span></div>');
+                    details.push('<div class="student-detail-row"><span class="student-detail-value">Student not found/not registered</span></div>');
                 }
                 faceInfo.innerHTML = '<div class="student-details">' + details.join('') + '</div>';
                 // Auto-record attendance when a face is detected (once per student per session).
-                if (info && info.student_id && !_recordedAttendance[info.student_id]) {
+                if (student && info.student_id && !_recordedAttendance[info.student_id]) {
                     _recordedAttendance[info.student_id] = true;
                     fetch('/api/record-attendance', {
                         method: 'POST',
                         credentials: 'same-origin',
                         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') || {}).getAttribute?.('content') || '' },
-                        body: JSON.stringify({ studentId: info.student_id, attendanceAction: operationAttendanceAction })
-                    }).then(function (r) { return r.json(); }).then(function (result) {
+                        body: JSON.stringify({ studentId: info.student_id, attendanceAction: choice, monitorSession })
+                    }).then(async function (r) {
+                        const result = await r.json();
+                        if (!r.ok) throw new Error(result.message || 'Attendance recording failed.');
+                        return result;
+                    }).then(function (result) {
                         if (result && result.action) {
                             // Show a brief confirmation.
                             var confirmEl = document.createElement('div');
@@ -417,10 +453,14 @@ async function openOperationMode() {
                                 });
                             }
                         }
-                    }).catch(function (err) { console.error('Attendance recording failed:', err); });
+                    }).catch(function (err) {
+                        delete _recordedAttendance[info.student_id];
+                        _lastCameraData = null;
+                        console.error('Attendance recording failed:', err);
+                    });
                 }
             } else if (faceDetected) {
-                faceInfo.innerHTML = '<div class="student-details"><div class="student-detail-row"><span class="student-detail-value">Face detected. (Recognition unavailable on this machine)</span></div></div>';
+                faceInfo.innerHTML = '<div class="student-details"><div class="student-detail-row"><span class="student-detail-value">Student not found/not registered</span></div></div>';
             } else {
                 faceInfo.innerHTML = '<div class="student-details"><div class="student-detail-row"><span class="student-detail-value">No face detected yet.</span></div></div>';
                 var overlay = document.getElementById('attendanceOverlay');
@@ -460,21 +500,24 @@ async function openOperationMode() {
     if (window.faceWebSocket) { window.faceWebSocket.close(); }
     var _lastCameraData = null;
     var _lastFetchTime = 0;
+    var cameraFetchPending = false;
     function fetchCameraCurrentStudent() {
+        if (cameraFetchPending) return;
         var now = Date.now();
         if (now - _lastFetchTime < 300) return; // debounce
         _lastFetchTime = now;
+        cameraFetchPending = true;
         fetch('/api/camera-current-student', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (data) {
             var key = JSON.stringify({ s: data && data.student && data.student.student_id, f: data && data.face_detected });
             if (key === _lastCameraData) return; // cache: skip if unchanged
             _lastCameraData = key;
             updateFaceInfoFromData(data);
-        }).catch(function () { /* ignore */ });
+        }).catch(function () { /* ignore */ }).finally(function () { cameraFetchPending = false; });
     }
     try {
         const wsUrl = window.location.protocol === 'https:'
             ? 'wss://' + window.location.host + '/ws'
-            : 'ws://127.0.0.1:8091';
+            : 'ws://' + window.location.hostname + ':8091';
         const ws = new WebSocket(wsUrl);
         window.faceWebSocket = ws;
         ws.onmessage = function (e) {
@@ -538,6 +581,7 @@ function toggleOperationFullscreen() {
 }
 
 async function closeOperationMode() {
+    stopOperationMonitor();
     document.body.classList.remove('operation-mode-active');
     if (operationEscapeHandler) {
         document.removeEventListener('keydown', operationEscapeHandler);
@@ -561,6 +605,8 @@ async function closeOperationMode() {
         operationFacePollTimer = null;
     }
     if (window.faceWebSocket) {
+        window.faceWebSocket.onclose = null;
+        window.faceWebSocket.onerror = null;
         window.faceWebSocket.close();
         window.faceWebSocket = null;
     }
@@ -666,6 +712,7 @@ async function refreshAttendanceRecords() {
 }
 
 function showAuth() {
+    stopOperationMonitor();
     document.getElementById('authScreen').hidden = false;
     document.getElementById('appShell').hidden = true;
 }
@@ -970,6 +1017,8 @@ document.querySelectorAll('.nav-link').forEach(function (link) {
         this.classList.add('active');
 
         const target = this.dataset.view;
+        if (operationMonitorSession) closeOperationMode();
+        if (target !== 'student-registration') stopRegistrationCamera();
         const dashboardSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
         if (dashboardSettings.rememberView !== false) {
             dashboardSettings.lastView = target;
@@ -1887,56 +1936,55 @@ let registrationCurrentPose = 'none';
 let registrationAutoCaptureEnabled = true;
 const REGISTRATION_ANGLES = ['front', 'down', 'right', 'left', 'up'];
 
-let registrationStream = null;
+let registrationCameraActive = false;
 function startRegistrationCamera() {
-    const video = document.getElementById('registrationVideo');
-    if (!video) return;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert('Browser camera is not supported in this browser.');
-        return;
-    }
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 960 } } })
-        .then(function (stream) {
-            registrationStream = stream;
-            video.srcObject = stream;
-            video.play();
-            const statusEl = document.getElementById('registrationPoseStatus');
-            if (statusEl) statusEl.textContent = 'Camera ready — capture each angle manually';
-        })
-        .catch(function (error) {
-            alert('Unable to access the camera: ' + (error.message || error));
-        });
+    const preview = document.getElementById('registrationVideo');
+    const statusEl = document.getElementById('registrationPoseStatus');
+    if (!preview || registrationCameraActive) return;
+    registrationCameraActive = true;
+    if (statusEl) statusEl.textContent = 'Connecting to camera…';
+    preview.onload = function () {
+        if (registrationCameraActive && statusEl) {
+            statusEl.textContent = 'Camera ready — capture each angle manually';
+        }
+    };
+    preview.onerror = function () {
+        stopRegistrationCamera();
+        if (statusEl) statusEl.textContent = 'Camera unavailable. Start the camera stream, then click Start Camera again.';
+    };
+    // Python owns the webcam; registration shares its MJPEG stream.
+    preview.src = window.location.protocol === 'https:'
+        ? 'api.php?action=camera-feed&_=' + Date.now()
+        : 'http://127.0.0.1:8090/video_feed#' + Date.now();
 }
 
 function stopRegistrationCamera() {
-    const video = document.getElementById('registrationVideo');
-    if (registrationStream) {
-        registrationStream.getTracks().forEach(function (track) { track.stop(); });
-        registrationStream = null;
+    registrationCameraActive = false;
+    const preview = document.getElementById('registrationVideo');
+    if (preview) {
+        preview.onload = null;
+        preview.onerror = null;
+        preview.removeAttribute('src');
     }
-    if (video) video.srcObject = null;
     registrationCurrentPose = 'none';
     const statusEl = document.getElementById('registrationPoseStatus');
-    if (statusEl) statusEl.textContent = 'Pose: none';
+    if (statusEl) statusEl.textContent = 'Camera stopped';
 }
 
 function pollRegistrationPose() {
-    // Browser camera has no pose detection; just keep status updated.
-    const statusEl = document.getElementById('registrationPoseStatus');
-    if (statusEl) statusEl.textContent = 'Camera ready — capture each angle manually';
+    // Registration uses manual captures from the shared stream.
 }
 
 function captureRegistrationFrame(angle) {
     const video = document.getElementById('registrationVideo');
     const canvas = document.getElementById('registrationCanvas');
     if (!video || !canvas) return;
-    if (!video.videoWidth || !video.videoHeight) {
-        // Retry shortly after the frame loads.
-        setTimeout(function () { captureRegistrationFrame(angle); }, 200);
+    if (!registrationCameraActive || !video.naturalWidth || !video.naturalHeight) {
+        alert('Start the camera and wait for the preview before capturing.');
         return;
     }
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = video.naturalWidth;
+    canvas.height = video.naturalHeight;
     const ctx = canvas.getContext('2d');
     try {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -1997,6 +2045,7 @@ async function submitStudentRegistration() {
     try {
         const payload = { studentId, fullName, course, schoolYear, parentPhone, year, status, facePhotos: facePhotos };
         await requestApi('/api/student', { method: 'POST', body: JSON.stringify(payload) });
+        await loadDashboardData();
         alert('Student registered successfully.');
         registrationCaptures = {};
         const container = document.getElementById('registrationCaptures');

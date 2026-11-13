@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
+use App\Services\MonitorState;
 use App\Services\SmsService;
 use Illuminate\Database\Connection;
 use Illuminate\Http\JsonResponse;
@@ -76,6 +77,7 @@ class AttendanceController extends Controller
                 return response()->json(['message' => 'Time out already recorded for this student today.', 'studentId' => $studentId, 'studentName' => $student->full_name, 'action' => 'already_recorded', 'timeIn' => (string) ($open->time_in ?? '--'), 'timeOut' => (string) ($open->time_out ?? '--')], 200);
             }
             $this->audit('Recorded time out for '.$studentId);
+            app(MonitorState::class)->publish((string) $request->input('monitorSession', ''), $student, 'time_out', $timeOut);
             $this->sendAttendanceSms($student, 'time_out', $timeOut, $attendanceDate);
 
             return response()->json(['message' => 'Time out recorded.', 'studentId' => $studentId, 'studentName' => $student->full_name, 'parentPhone' => $student->parent_phone, 'date' => $attendanceDate, 'timeOut' => $timeOut, 'subject' => $subject, 'status' => $status, 'action' => 'time_out']);
@@ -97,6 +99,7 @@ class AttendanceController extends Controller
             'created_at' => now()->format('Y-m-d H:i:s'),
         ]);
         $this->audit('Recorded '.$status.' attendance for '.$studentId);
+        app(MonitorState::class)->publish((string) $request->input('monitorSession', ''), $student, 'time_in', $timeIn);
         $this->sendAttendanceSms($student, 'time_in', $timeIn, $attendanceDate);
 
         return response()->json(['message' => 'Attendance recorded.', 'studentId' => $studentId, 'studentName' => $student->full_name, 'parentPhone' => $student->parent_phone, 'date' => $attendanceDate, 'timeIn' => $timeIn, 'subject' => $subject, 'status' => $status, 'action' => 'time_in']);
@@ -144,6 +147,8 @@ class AttendanceController extends Controller
                 return response()->json(['message' => 'Time out already recorded for this student today.'], 409);
             }
             $this->audit('Device recorded time out for '.$studentId);
+            app(MonitorState::class)->publish((string) $request->input('monitorSession', ''), $student, 'time_out', $timeOut);
+            $this->sendAttendanceSms($student, 'time_out', $timeOut, $attendanceDate);
 
             return response()->json(['message' => 'Time out recorded.', 'studentId' => $studentId, 'studentName' => $student->full_name, 'parentPhone' => $student->parent_phone, 'date' => $attendanceDate, 'timeOut' => $timeOut, 'action' => 'time_out']);
         }
@@ -160,6 +165,8 @@ class AttendanceController extends Controller
             'created_at' => now()->format('Y-m-d H:i:s'),
         ]);
         $this->audit('Device recorded attendance for '.$studentId);
+        app(MonitorState::class)->publish((string) $request->input('monitorSession', ''), $student, 'time_in', $timeIn);
+        $this->sendAttendanceSms($student, 'time_in', $timeIn, $attendanceDate);
 
         return response()->json(['message' => 'Attendance recorded.', 'studentId' => $studentId, 'studentName' => $student->full_name, 'parentPhone' => $student->parent_phone, 'date' => $attendanceDate, 'timeIn' => $timeIn, 'action' => 'time_in']);
     }
@@ -176,21 +183,10 @@ class AttendanceController extends Controller
         $enabledKey = $action === 'time_in' ? 'sms_time_in_enabled' : 'sms_time_out_enabled';
         $messageKey = $action === 'time_in' ? 'sms_time_in_message' : 'sms_time_out_message';
         $provider = strtolower((string) env('SMS_PROVIDER', 'textbee'));
-        // When the Raspberry Pi is the SMS backend, sending is always enabled.
-        if ($provider !== 'raspberry_pi' && $this->setting($enabledKey) !== 'true') {
-            return;
-        }
+        $enabled = $provider === 'raspberry_pi'
+            ? $this->setting($enabledKey) !== 'false'
+            : $this->setting($enabledKey) === 'true';
         $phone = trim((string) ($student->parent_phone ?? ''));
-        if ($provider === 'raspberry_pi') {
-            Log::info('Dispatching SMS to Pi', [
-                'action' => $action,
-                'phone' => $phone,
-                'student' => $student->full_name,
-            ]);
-        }
-        if ($phone === '') {
-            return;
-        }
         $template = $this->setting($messageKey);
         if ($template === null || trim($template) === '') {
             $template = $action === 'time_in'
@@ -206,12 +202,19 @@ class AttendanceController extends Controller
             'course' => $student->course,
         ]);
 
-        if ($provider === 'raspberry_pi') {
-            $this->sendAttendanceSmsViaPi($phone, $message, $student->full_name);
-
-            return;
+        if ($provider === 'raspberry_pi' || env('ATTENDANCE_LCD_ENABLED', true)) {
+            $this->sendAttendanceSmsViaPi($phone, $message, $student->full_name, [
+                'event_id' => bin2hex(random_bytes(16)),
+                'student_id' => $student->student_id,
+                'action' => $action,
+                'time' => $time,
+                'date' => $attendanceDate,
+                'send_sms' => $provider === 'raspberry_pi' && $enabled && $phone !== '',
+            ]);
         }
-        (new SmsService)->send($phone, $message);
+        if ($provider !== 'raspberry_pi' && $enabled && $phone !== '') {
+            (new SmsService)->send($phone, $message);
+        }
     }
 
     private function resolvePython(): string
@@ -232,44 +235,24 @@ class AttendanceController extends Controller
         return $isWindows ? 'python' : 'python3';
     }
 
-    private function sendAttendanceSmsViaPi(string $phone, string $message, string $name): void
+    private function sendAttendanceSmsViaPi(string $phone, string $message, string $name, array $attendance): void
     {
-        $configured = (string) env('PI_SMS_URL', 'http://host.docker.internal:8092/send-sms');
-        $parts = parse_url($configured);
-        $port = $parts['port'] ?? 8092;
-        $path = $parts['path'] ?? '/send-sms';
-        $hosts = array_values(array_unique(array_filter([
-            $parts['host'] ?? null,
-            'host.docker.internal',
-            '127.0.0.1',
-            'localhost',
-        ])));
-        $urls = [];
-        foreach ($hosts as $host) {
-            $scheme = $parts['scheme'] ?? 'http';
-            $urls[] = "{$scheme}://{$host}:{$port}{$path}";
-        }
-        $urls = array_values(array_unique($urls));
-
-        foreach ($urls as $url) {
-            Log::info('Pi SMS HTTP dispatch starting', ['url' => $url, 'phone' => $phone]);
-            try {
-                $response = Http::timeout(5)->post($url, [
-                    'phone' => $phone,
-                    'message' => $message,
-                    'name' => $name,
-                ]);
-                Log::info('Pi SMS HTTP dispatch finished', ['url' => $url, 'status' => $response->status(), 'body' => $response->body()]);
-                if ($response->successful()) {
-                    return;
-                }
-                Log::warning('Pi SMS HTTP dispatch failed', ['url' => $url, 'status' => $response->status(), 'body' => $response->body()]);
-            } catch (\Throwable $e) {
-                Log::warning('Pi SMS HTTP dispatch exception', ['url' => $url, 'error' => $e->getMessage()]);
-                continue;
+        // The bridge queues messages in order and responds immediately. A
+        // timeout must not resend the same message to an alias of this host.
+        $url = (string) env('PI_SMS_URL', 'http://127.0.0.1:8092/send-sms');
+        try {
+            $response = Http::connectTimeout(2)->timeout(5)->post($url, [
+                'phone' => $phone,
+                'message' => $message,
+                'name' => $name,
+                ...$attendance,
+            ]);
+            if (! $response->successful() || $response->json('ok') !== true) {
+                Log::warning('Pi SMS queue rejected message', ['status' => $response->status(), 'body' => $response->body()]);
             }
+        } catch (\Throwable $error) {
+            Log::error('Pi SMS queue unavailable', ['error' => $error->getMessage()]);
         }
-        Log::error('Pi SMS HTTP dispatch failed on all candidate URLs', ['urls' => $urls]);
     }
 
     private function deviceToken(): string

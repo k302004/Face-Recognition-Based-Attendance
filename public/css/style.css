@@ -861,6 +861,7 @@ body {
     min-height: 75px;
     background: #800000;
     color: white;
+    
     padding: 0 40px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
     position: relative;
@@ -873,7 +874,7 @@ body {
     min-height: 75px;
     display: flex;
     align-items: center;
-    gap: 28px;
+    gap: 60px;
 }
 
 .logo {
@@ -904,7 +905,7 @@ body {
 
 .site-nav__list {
     display: flex;
-    gap: 28px;
+    gap: 100px;
     list-style: none;
 }
 
@@ -2782,20 +2783,7 @@ tr:hover {
 }
 
 /* Product visual system */
-:root {
-    --ink: #17222d;
-    --muted-ink: #687783;
-    --canvas: #f4f7f8;
-    --surface: #ffffff;
-    --line: #dbe4e8;
-    --brand: #9B2E41;
-    --brand-strong: #792332;
-    --accent: #d6a84f;
-    --accent-soft: #fbf4e5;
-    --success: #2f7968;
-    --danger: #b65752;
-    --shadow: 0 18px 50px rgba(22, 45, 54, 0.08);
-}
+/* Shared color tokens are loaded from theme.css. */
 
 html {
     background: var(--canvas);

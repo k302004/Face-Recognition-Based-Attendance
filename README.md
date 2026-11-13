@@ -138,6 +138,17 @@ Streaming camera index 0 on http://0.0.0.0:8090/video_feed
 
 ## Operation Mode (real-time attendance)
 
+### Second laptop attendance monitor
+
+1. Connect both computers to the same local network.
+2. On the main PC, double-click **Start All.vbs**. The web server listens on port 8000 for local-network connections.
+3. Run **Enable Monitor Access.vbs** once and approve the administrator prompt. This allows inbound TCP 8000 from the local subnet on the active network adapter.
+4. Find the main PC's IPv4 address with `ipconfig`. On the second laptop, open `http://MAIN-PC-IP:8000/monitor` (for example, `http://10.81.122.220:8000/monitor`).
+5. Refresh the main dashboard after an update. Click **Start Operation Mode** and choose Time In or Time Out. The second laptop activates automatically and shows the main camera feed, registered student profile image, and face information. Recorded confirmations appear only after attendance is saved. **Open Monitor** also opens the display on the main PC for checking.
+6. Stop Operation Mode to return the display to its waiting screen. If the operator browser closes or disconnects, it returns to waiting after the 20-second heartbeat expires. Press **Fullscreen** on the monitor to fill its screen.
+
+The monitor needs no login or webcam. It shows the live camera feed, student name, ID, enrollment photo, course, year, age, school year, status, and recorded time; parent phone numbers and other dashboard details are not published. Operation controls still require an authenticated operator. The monitor uses the main PC address for student information and the live camera stream on port 8090. It never connects to the second laptop's own localhost. HTTP video bypasses Laravel so camera frames cannot block attendance or heartbeat requests.
+
 1. Log in as Administrator.
 2. Click "Start Operation Mode" on the Home page.
 3. The camera feed appears. When a known face is detected:

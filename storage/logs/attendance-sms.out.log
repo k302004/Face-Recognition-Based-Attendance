@@ -1,0 +1,3 @@
+SMS bridge listening on http://0.0.0.0:8092
+Forwarding to Pi via COM4 @ 115200
+Endpoints: POST /send-sms  {"phone","message","name"}, GET /health

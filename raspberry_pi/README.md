@@ -61,3 +61,46 @@ For normal unattended operation, use `sudo systemctl start attendance-client` in
 Connect the modem by USB, insert a SIM, and find its serial device with `ls /dev/ttyUSB*`. Set `sms_enabled` and `sms_port` in `config.json`. The client sends to the `parent_phone` stored for the recognized student. The modem requires its own stable power supply; do not power it from a GPIO pin.
 
 The client sends SMS to the `parent_phone` returned by the protected API for the recognized student.
+
+## Website attendance confirmations on the I2C LCD
+
+For the Windows camera + serial SMS bridge setup, the Pi runs `sms_sender.py`.
+After a new attendance record is saved, the website forwards the student's name
+and `time_in` or `time_out` action through `scripts/send_to_pi.py` to this listener.
+The 16x2 LCD flashes `IN: Recorded` or `OUT: Recorded`, scrolls long names, and
+returns to `Attendance Ready`. Repeated scans that are already recorded do not
+trigger another confirmation. The LCD confirmation is independent of SMS success.
+
+Copy **both** updated files, `sms_sender.py` and `attendance_lcd.py`, into the
+existing project `raspberry_pi` folder on the Pi. Preserve your existing
+`config.json`, device token, and modem settings. With I2C enabled, add these
+settings to that config if needed (the defaults are shown):
+
+```json
+"lcd_enabled": true,
+"lcd_address": "0x27",
+"lcd_i2c_bus": 1,
+"lcd_hold_seconds": 2
+```
+
+Use your LCD backpack's actual I2C address if it differs from `0x27`.
+From that folder, install the display dependencies and test without sending SMS:
+
+```bash
+.venv/bin/python -m pip install RPLCD smbus2
+.venv/bin/python sms_sender.py --test-lcd time_in --name "Test Student"
+.venv/bin/python sms_sender.py --test-lcd time_out --name "Test Student"
+```
+
+Stop the previous serial listener before running the updated one:
+
+```bash
+.venv/bin/python sms_sender.py --port /dev/ttyAMA1 --baud 115200
+```
+
+Keep the serial port previously used by your working PC-to-Pi connection if it
+differs from `/dev/ttyAMA1`. Only one process should control the LCD and this serial
+port; do not run `attendance_client.py` alongside this listener on the same LCD.
+On Windows, restart the SMS bridge with **Stop Attendance.vbs**, then
+**Start All.vbs**. A newly recorded Time In or Time Out should then show on the LCD.
+The Windows launcher does not start programs on the Pi.

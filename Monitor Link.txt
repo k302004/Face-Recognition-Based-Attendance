@@ -1,0 +1,6 @@
+Open this address on the second laptop connected to the same network:
+http://10.81.122.220:8000/monitor
+
+On the main PC, click Start Operation Mode to activate the monitor.
+Camera: public/camera.config. SMS/LCD bridge: COM4.
+The Raspberry Pi must be powered on; its sms_listener.service starts on boot.

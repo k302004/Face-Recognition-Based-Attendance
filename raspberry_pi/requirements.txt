@@ -3,5 +3,6 @@ face-recognition
 requests
 pyserial
 RPLCD
+smbus2
 numpy
 python-gsmmodem

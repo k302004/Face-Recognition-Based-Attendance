@@ -12,6 +12,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from attendance_lcd import initialize_lcd as create_attendance_lcd, show_attendance
 
 # Prefer the project virtualenv so RPLCD/pyserial/gsmmodem are importable.
 def _venv_python():
@@ -30,7 +31,7 @@ def _venv_python():
     return None
 
 _venv = _venv_python()
-if _venv is not None and Path(sys.executable).resolve() != _venv.resolve():
+if __name__ == "__main__" and _venv is not None and Path(sys.prefix).absolute() != _venv.parent.parent.absolute():
     os.execv(str(_venv), [str(_venv), *sys.argv])
 
 try:
@@ -42,8 +43,7 @@ except ImportError:
 try:
     from gsmmodem.pdu import encodeSmsSubmitPdu
 except ImportError:
-    print("gsmmodem is not installed. Install with: pip install python-gsmmodem-new", file=sys.stderr)
-    raise SystemExit(1)
+    encodeSmsSubmitPdu = None
 
 try:
     from RPLCD.i2c import CharLCD
@@ -68,18 +68,8 @@ def load_config():
         return {}
 
 
-def initialize_lcd():
-    if CharLCD is None:
-        print("[LCD] RPLCD is not installed; continuing without LCD")
-        return None
-    try:
-        lcd = CharLCD("PCF8574", 0x27, cols=16, rows=2)
-        reset_lcd_idle(lcd)
-        print("[LCD] Ready")
-        return lcd
-    except Exception as error:
-        print(f"[LCD] Disabled: {error}")
-        return None
+def initialize_lcd(config=None):
+    return create_attendance_lcd(config or {})
 
 
 def reset_lcd_idle(lcd):
@@ -87,9 +77,9 @@ def reset_lcd_idle(lcd):
         return
     try:
         lcd.clear()
-        lcd.write_string("SMS Sender Ready")
+        lcd.write_string("Attendance Ready")
         lcd.cursor_pos = (1, 0)
-        lcd.write_string("Waiting...")
+        lcd.write_string("Scan your face")
     except Exception as error:
         print(f"[LCD] Display reset failed: {error}")
 
@@ -177,6 +167,8 @@ def init_modem(config):
 
 
 def send_sms(config, recipient, message):
+    if encodeSmsSubmitPdu is None:
+        return False, "python-gsmmodem-new is not installed"
     if not recipient:
         print("SMS skipped: no recipient phone number")
         return False, "no_recipient"
@@ -261,38 +253,48 @@ def handle_payload(payload, lcd, config):
 
     print(f"[RPi] Payload received: phone={phone}, name={name}")
 
-    if name:
-        show_lcd_status(lcd, "Sending SMS...", name)
+    action = payload.get('action')
+    attendance = action in ('time_in', 'time_out')
+    displayed = show_attendance(lcd, name or payload.get('student_id', 'Student'), action, config) if attendance else False
+    wants_sms = payload.get('send_sms', True) is not False
+    if wants_sms:
+        if not attendance:
+            show_lcd_status(lcd, 'Sending SMS...', name or '')
+        sent, reason = send_sms(config, phone, message)
+        if not attendance:
+            show_lcd_status(lcd, 'SMS Sent OK!' if sent else 'SMS Failed!', name or reason[:16])
+            time.sleep(1.5)
     else:
-        show_lcd_status(lcd, "Sending SMS...")
-
-    sent, reason = send_sms(config, phone, message)
-
-    if sent:
-        show_lcd_status(lcd, "SMS Sent OK!", name or "")
-    else:
-        show_lcd_status(lcd, "SMS Failed!", reason[:16])
-    
-    time.sleep(1.5)
+        sent, reason = False, 'not_requested'
     reset_lcd_idle(lcd)
-
     return {
-        "status": "ok" if sent else "failed",
-        "name": name,
-        "phone": phone,
-        "sent": sent,
-        "reason": reason
+        'status': 'ok' if sent or not wants_sms else 'failed',
+        'event_id': payload.get('event_id'),
+        'attendance_received': attendance,
+        'displayed': displayed,
+        'name': name,
+        'phone': phone,
+        'sent': sent,
+        'reason': reason,
     }
 
 def main():
     parser = argparse.ArgumentParser(description="Listen for SMS payloads from PC and send via SIM7600 (PDU mode).")
     parser.add_argument("--port", default="/dev/ttyAMA1", help="Serial port connected to PC")
     parser.add_argument("--baud", type=int, default=115200, help="Baud rate")
+    parser.add_argument("--test-lcd", choices=['time_in', 'time_out'], help="Test only the LCD; no SMS or serial connection")
+    parser.add_argument("--name", default='Test Student', help="Name for --test-lcd")
     args = parser.parse_args()
 
     config = load_config()
-    lcd = initialize_lcd()
-    init_modem(config)
+    lcd = initialize_lcd(config)
+    if args.test_lcd:
+        if lcd is None:
+            raise SystemExit('LCD is unavailable. Check I2C, lcd_address, and RPLCD dependencies.')
+        show_attendance(lcd, args.name, args.test_lcd, config)
+        reset_lcd_idle(lcd)
+        return
+    # Initialize the modem only when SMS is requested; LCD-only events need no modem.
 
     print(f"Starting Pi serial listener on {args.port} at {args.baud} baud...")
     try:

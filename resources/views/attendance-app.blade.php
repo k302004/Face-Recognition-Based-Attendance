@@ -8,6 +8,7 @@
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,600;6..96,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ asset('css/theme.css') }}?v={{ filemtime(public_path('css/theme.css')) }}">
         <link rel="stylesheet" href="{{ asset('css/style.css') }}?v={{ filemtime(public_path('css/style.css')) }}">
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script src="{{ asset('js/script.js') }}?v={{ filemtime(public_path('js/script.js')) }}" defer></script>
@@ -103,6 +104,7 @@
 
                     <div class="site-header__actions">
                         <button class="header-operation-btn" type="button" onclick="openOperationMode()">Start Operation Mode</button>
+                        <a class="header-operation-btn" href="/monitor" target="_blank" rel="noopener">Open Monitor</a>
                         <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode">Dark mode</button>
                         <div class="admin">
                             <button class="admin-btn" type="button" aria-expanded="false" aria-controls="menu" onclick="toggleMenu()">
@@ -733,7 +735,7 @@
 
                          <div class="registration-capture">
                              <div class="camera-preview">
-                                 <video id="registrationVideo" autoplay playsinline muted crossorigin="anonymous" style="width:100%;height:100%;object-fit:cover;display:block;"></video>
+                                 <img id="registrationVideo" crossorigin="anonymous" alt="Student registration camera preview" style="width:100%;height:100%;object-fit:cover;display:block;">
                                  <canvas id="registrationCanvas" hidden></canvas>
                                  <div class="face-oval-guide" aria-hidden="true"></div>
                              </div>
